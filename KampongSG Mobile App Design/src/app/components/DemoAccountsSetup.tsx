@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Users, Loader } from 'lucide-react';
-import { projectId, publicAnonKey } from '../../../utils/supabase/info.tsx';
+import { publicAnonKey } from '../../../utils/supabase/info.tsx';
+import { supabaseFunctionsApiBase } from '../../../utils/supabase/api';
 
 const DEMO_ACCOUNTS = [
   // Patient - Uncle Tan (elderly patient with diabetes and mobility issues)
@@ -31,7 +32,7 @@ export function DemoAccountsSetup({ onClose }) {
         const account = DEMO_ACCOUNTS[i];
 
         const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/make-server-fd25410b/signup`,
+          `${supabaseFunctionsApiBase}/signup`,
           {
             method: 'POST',
             headers: {

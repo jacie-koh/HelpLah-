@@ -1,9 +1,10 @@
 import { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Settings, MapPin, Users, CheckCircle, Bell, LayoutGrid, Home, FileText, BookOpen, Calendar, MessageCircle } from 'lucide-react';
-import { projectId } from '../../../utils/supabase/info.tsx';
+import { supabaseFunctionsApiBase } from '../../../utils/supabase/api';
 import { LanguageContext } from '../App';
 import { getTranslation } from '../utils/translations';
+import { useDynamicTranslations } from '../utils/dynamicTranslations';
 
 export function CommunityCaregiverView({ user, profile, accessToken }) {
   const [isAvailable, setIsAvailable] = useState(false);
@@ -35,7 +36,51 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
   ]);
   const navigate = useNavigate();
   const { language, accessibilitySettings } = useContext(LanguageContext);
-  const t = (key) => getTranslation(language, key);
+  const t = (key: string, vars?: Record<string, string | number>) =>
+    getTranslation(language, key, vars);
+  const greetingName = profile?.name || 'Caregiver';
+  const dt = useDynamicTranslations(
+    [
+      ...patients.flatMap((patient) => [
+        patient.distance,
+        patient.lastActivity,
+        patient.helpNeeded,
+        patient.timeNeeded,
+        ...(patient.assignments || []).flatMap((assignment) => [assignment.task])
+      ]),
+      ...communityNotes.flatMap((note) => [note.title, note.summary, note.time]),
+      ...supportRequests.flatMap((request) => [
+        request.location,
+        request.distance,
+        request.request,
+        request.time,
+        request.status
+      ]),
+      ...availableAssignments.flatMap((assignment) => [
+        assignment.task,
+        assignment.location,
+        assignment.status
+      ]),
+      ...getCommunityAlerts().flatMap((alertItem) => [
+        alertItem.message,
+        alertItem.title,
+        alertItem.patient?.helpNeeded,
+        alertItem.patient?.timeNeeded,
+        alertItem.patient?.distance
+      ]),
+      'Notifications are turned off in Settings.',
+      'Just now',
+      'Updated now',
+      'Caring SG',
+      'AIC Caregiving Support',
+      'AIC Help for Caregivers',
+      'Club Heal',
+      'Mindful Community',
+      'SEA Lion Chatbot'
+    ],
+    language,
+    accessToken
+  );
   const localeByLanguage = {
     'en-sg': 'en-SG',
     'zh-sg': 'zh-SG',
@@ -45,8 +90,6 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
     'ta-sg': 'ta-SG'
   };
   const locale = localeByLanguage[language] || 'en-SG';
-
-  const greetingName = profile?.name || 'Caregiver';
 
   useEffect(() => {
     if (user?.id && accessToken) {
@@ -59,7 +102,7 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
   async function loadAvailability() {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-fd25410b/caregiver/${user.id}/availability`,
+        `${supabaseFunctionsApiBase}/caregiver/${user.id}/availability`,
         { headers: { 'Authorization': `Bearer ${accessToken}` } }
       );
 
@@ -76,7 +119,7 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
   async function saveAvailability(available) {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-fd25410b/caregiver/${user.id}/availability`,
+        `${supabaseFunctionsApiBase}/caregiver/${user.id}/availability`,
         {
           method: 'POST',
           headers: {
@@ -271,7 +314,7 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
 
     try {
       await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-fd25410b/availability`,
+        `${supabaseFunctionsApiBase}/availability`,
         {
           method: 'POST',
           headers: {
@@ -286,7 +329,7 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
         }
       );
 
-      alert(newAvailability ? '✓ You are now available to help' : '✓ You are now unavailable');
+      alert(newAvailability ? t('alertNowAvailable') : t('alertNowUnavailable'));
     } catch (error) {
       console.log('Error updating availability:', error);
     }
@@ -294,11 +337,11 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
 
   async function handleTakeOver() {
     setIsWatching(true);
-    alert('✓ You are now watching the patient. All caregivers have been notified.');
+    alert(t('alertWatchingPatient'));
 
     try {
       await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-fd25410b/availability`,
+        `${supabaseFunctionsApiBase}/availability`,
         {
           method: 'POST',
           headers: {
@@ -342,7 +385,7 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
         request.id === requestId ? { ...request, status: 'accepted' } : request
       )
     );
-    alert('✓ You accepted the request and the primary caregiver has been notified.');
+    alert(t('alertAcceptedRequest'));
   }
 
   function handleOfferHelp(patientId) {
@@ -362,7 +405,7 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
         status: 'accepted'
       };
       setAvailableAssignments(prev => [...prev, newAssignment]);
-      alert(`✓ You've offered to help ${patient.name}. The primary caregiver will be notified of your availability.`);
+      alert(t('alertOfferHelpPrimaryNotified', { name: patient.name }));
     }
   }
 
@@ -486,11 +529,11 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
 
   function handleAddNote() {
     if (!selectedPatientId) {
-      alert('Please select a patient first.');
+      alert(t('alertSelectPatientFirst'));
       return;
     }
     if (!newNoteTitle.trim() || !newNoteSummary.trim()) {
-      alert('Please enter both a title and a note.');
+      alert(t('alertNeedTitleAndNote'));
       return;
     }
 
@@ -502,7 +545,7 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
     );
 
     if (!activeAssignment) {
-      alert('Notes can only be added while you are handling this patient.');
+      alert(t('alertNotesOnlyWhileHandling'));
       return;
     }
 
@@ -525,7 +568,7 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
 
   function handleEditNote(note) {
     if (!isNoteAccessible(note)) {
-      alert('This note is locked and can no longer be edited.');
+      alert(t('alertNoteLocked'));
       return;
     }
     setEditingNoteId(note.id);
@@ -535,7 +578,7 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
 
   function handleSaveNote() {
     if (!editingTitle.trim() || !editingSummary.trim()) {
-      alert('Please enter both a title and note content.');
+      alert(t('alertNeedTitleAndContent'));
       return;
     }
 
@@ -597,7 +640,7 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
         assignment.id === assignmentId ? { ...assignment, status: 'accepted' } : assignment
       )
     );
-    alert('✓ Assignment added to your schedule.');
+    alert(t('alertAssignmentScheduled'));
   }
 
   function handleEditDayTime(dayIndex) {
@@ -640,7 +683,7 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
   }
 
   function openChatbot() {
-    alert('🤖 SEA Lion Chatbot\n\nOpening voice/text chat interface for communication with primary caregivers and patients.\n\nFeatures:\n• Text-to-speech in multiple languages\n• Speech-to-text for SEA dialects\n• Real-time communication\n• Emergency alerts');
+    alert(t('alertChatbotInfo'));
   }
 
   return (
@@ -649,7 +692,7 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
       <div className="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-4 py-3 flex items-center justify-between shadow-md">
         <div className="flex items-center gap-2">
           <LayoutGrid className="w-6 h-6" />
-          <h1 className="text-xl font-bold">KampongSG</h1>
+          <h1 className="text-xl font-bold">{t('brandName')}</h1>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -759,8 +802,8 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
                               <span className="text-sm font-semibold text-gray-800">{assignment.patientName}</span>
                               <span className="text-xs text-gray-600">{assignment.startTime} - {assignment.endTime}</span>
                             </div>
-                            <p className="text-sm text-gray-700 mb-2">{assignment.task}</p>
-                            <p className="text-xs text-gray-600 mb-3">📍 {assignment.location}</p>
+                            <p className="text-sm text-gray-700 mb-2">{dt(assignment.task)}</p>
+                            <p className="text-xs text-gray-600 mb-3">📍 {dt(assignment.location)}</p>
                             {assignment.status === 'open' ? (
                               <button
                                 onClick={() => handleTakeAssignment(assignment.id)}
@@ -867,10 +910,10 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
                       <div key={patient.id} className="rounded-2xl bg-orange-50 border border-orange-200 p-4 text-sm">
                         <div className="flex items-center justify-between gap-3">
                           <p className="font-semibold text-orange-900">{patient.name}</p>
-                          <span className="shrink-0 text-xs text-orange-800">{patient.distance}</span>
+                          <span className="shrink-0 text-xs text-orange-800">{dt(patient.distance)}</span>
                         </div>
-                        <p className="text-orange-700 text-xs mt-2">📋 {patient.helpNeeded}</p>
-                        <p className="text-orange-700 text-xs mt-1">🕐 {patient.timeNeeded}</p>
+                        <p className="text-orange-700 text-xs mt-2">📋 {dt(patient.helpNeeded)}</p>
+                        <p className="text-orange-700 text-xs mt-1">🕐 {dt(patient.timeNeeded)}</p>
                         <button
                           onClick={() => handleOfferHelp(patient.id)}
                           className="mt-3 w-full bg-orange-600 text-white py-2 rounded-lg text-xs font-semibold hover:bg-orange-700 transition"
@@ -899,9 +942,9 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
                   </div>
                   <p className="text-gray-600 mb-3">{t('resourceQuickLinks')}</p>
                   <ul className="space-y-2 text-sm text-blue-700">
-                    <li><a href="https://www.caring.sg/" target="_blank" rel="noreferrer" className="underline">Caring SG</a></li>
-                    <li><a href="https://www.aic.sg/Caregiving-Support/Connecting-with-other-caregivers" target="_blank" rel="noreferrer" className="underline">AIC Caregiving Support</a></li>
-                    <li><a href="https://www.aic.sg/" target="_blank" rel="noreferrer" className="underline">AIC Help for Caregivers</a></li>
+                    <li><a href="https://www.caring.sg/" target="_blank" rel="noreferrer" className="underline">{dt('Caring SG')}</a></li>
+                    <li><a href="https://www.aic.sg/Caregiving-Support/Connecting-with-other-caregivers" target="_blank" rel="noreferrer" className="underline">{dt('AIC Caregiving Support')}</a></li>
+                    <li><a href="https://www.aic.sg/" target="_blank" rel="noreferrer" className="underline">{dt('AIC Help for Caregivers')}</a></li>
                   </ul>
                 </div>
 
@@ -912,11 +955,11 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
                   </div>
                   <div className="space-y-3 text-gray-700">
                     <div className="rounded-xl border border-gray-200 p-4 bg-slate-50">
-                      <p className="font-semibold">Club Heal</p>
+                      <p className="font-semibold">{dt('Club Heal')}</p>
                       <p>6899 3463</p>
                     </div>
                     <div className="rounded-xl border border-gray-200 p-4 bg-slate-50">
-                      <p className="font-semibold">Mindful Community</p>
+                      <p className="font-semibold">{dt('Mindful Community')}</p>
                       <p>6460 4400</p>
                     </div>
                   </div>
@@ -925,7 +968,7 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
                 <div className="bg-white border-2 border-gray-200 rounded-2xl p-5">
                   <div className="flex items-center gap-3 mb-4">
                     <MessageCircle className="w-7 h-7 text-purple-600" />
-                    <h3 className="text-lg font-bold text-gray-800">SEA Lion Chatbot</h3>
+                    <h3 className="text-lg font-bold text-gray-800">{dt('SEA Lion Chatbot')}</h3>
                   </div>
                   <p className="text-gray-600 mb-3">{t('chatbotDescription')}</p>
                   <button
@@ -1031,9 +1074,9 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
                         ) : (
                           <>
                             <div className="flex items-center justify-between mb-3">
-                              <h3 className="text-lg font-bold text-gray-800">{note.title}</h3>
+                              <h3 className="text-lg font-bold text-gray-800">{dt(note.title)}</h3>
                               <div className="flex items-center gap-2">
-                                <span className="text-xs text-gray-500">{note.time}</span>
+                                <span className="text-xs text-gray-500">{dt(note.time)}</span>
                                 <button
                                   onClick={() => handleEditNote(note)}
                                   className="text-xs text-purple-600 hover:text-purple-800"
@@ -1042,7 +1085,7 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
                                 </button>
                               </div>
                             </div>
-                            <p className="text-gray-700 mb-4">{note.summary}</p>
+                            <p className="text-gray-700 mb-4">{dt(note.summary)}</p>
                           </>
                         )}
                       </div>
@@ -1066,7 +1109,7 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
               <p className="text-sm text-gray-600">{t('alertsDescription')}</p>
               {!accessibilitySettings.notifications ? (
                 <div className="mt-4 rounded-2xl bg-slate-50 border border-gray-200 p-4 text-sm text-gray-600">
-                  Notifications are turned off in Settings.
+                  {dt('Notifications are turned off in Settings.')}
                 </div>
               ) : getCommunityAlerts().length === 0 ? (
                 <div className="mt-4 rounded-2xl bg-slate-50 border border-gray-200 p-4 text-sm text-gray-600">
@@ -1082,10 +1125,10 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
                         <div key={alertItem.id} className="rounded-2xl bg-orange-50 border border-orange-200 p-4 text-sm">
                           <div className="flex items-center justify-between gap-3">
                             <p className="font-semibold text-orange-900">{patient.name}</p>
-                            <span className="shrink-0 text-xs text-orange-800">{patient.distance}</span>
+                            <span className="shrink-0 text-xs text-orange-800">{dt(patient.distance)}</span>
                           </div>
-                          <p className="text-orange-700 text-xs mt-2">📋 {patient.helpNeeded}</p>
-                          <p className="text-orange-700 text-xs mt-1">🕐 {patient.timeNeeded}</p>
+                          <p className="text-orange-700 text-xs mt-2">📋 {dt(patient.helpNeeded)}</p>
+                          <p className="text-orange-700 text-xs mt-1">🕐 {dt(patient.timeNeeded)}</p>
                           <button
                             onClick={() => handleOfferHelp(patient.id)}
                             className="mt-3 w-full bg-orange-600 text-white py-2 rounded-lg text-xs font-semibold hover:bg-orange-700 transition"
@@ -1103,7 +1146,7 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
                             <Calendar className="w-5 h-5 text-blue-600" />
                             <div>
                           <p className="font-semibold text-blue-900">{t('assignmentDrop')}</p>
-                              <p className="text-blue-700 text-xs mt-1">{alertItem.message}</p>
+                              <p className="text-blue-700 text-xs mt-1">{dt(alertItem.message)}</p>
                             </div>
                           </div>
                           <button
@@ -1124,8 +1167,8 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
                         <div className="flex items-center gap-3">
                           <CheckCircle className="w-5 h-5 text-green-600" />
                           <div>
-                            <p className="font-semibold text-green-900">{alertItem.title}</p>
-                            <p className="text-green-700 text-xs mt-1">{alertItem.message}</p>
+                            <p className="font-semibold text-green-900">{dt(alertItem.title)}</p>
+                            <p className="text-green-700 text-xs mt-1">{dt(alertItem.message)}</p>
                           </div>
                         </div>
                       </div>

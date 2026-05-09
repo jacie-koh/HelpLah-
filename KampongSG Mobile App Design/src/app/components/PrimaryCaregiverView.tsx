@@ -1,11 +1,12 @@
 import { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Settings, CheckCircle, Clock, RefreshCw, Plus, Bell, Users, Activity, MessageSquare, MapPin, Home, HelpCircle, LayoutGrid, Video, Image as ImageIcon, Calendar, Mic, Volume2, Phone, Mail, MessageCircle, FileText, ClipboardList, Heart, X } from 'lucide-react';
-import { projectId } from '../../../utils/supabase/info.tsx';
+import { supabaseFunctionsApiBase } from '../../../utils/supabase/api';
 import { TaskManager } from './TaskManager';
 import { CommunitySupportScheduler } from './CommunitySupportScheduler';
 import { LanguageContext } from '../App';
 import { getTranslation } from '../utils/translations';
+import { useDynamicTranslations } from '../utils/dynamicTranslations';
 import { recordSpeechToText, speakText } from '../utils/voice';
 
 export function PrimaryCaregiverView({ user, profile, accessToken }) {
@@ -30,8 +31,44 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
   const [isRecordingNote, setIsRecordingNote] = useState(false);
   const navigate = useNavigate();
   const { language, accessibilitySettings } = useContext(LanguageContext);
-  const t = (key) => getTranslation(language, key);
+  const t = (key: string, vars?: Record<string, string | number>) =>
+    getTranslation(language, key, vars);
   const visibleNotifications = accessibilitySettings.notifications ? notifications : [];
+  const dt = useDynamicTranslations(
+    [
+      ...tasks.map((task) => task.title),
+      ...myTasks.map((task) => task.title),
+      ...visibleNotifications.flatMap((notification) => [notification.message, notification.location, notification.time]),
+      ...communitySupport.flatMap((session) => [session.duration, session.status, session.tasks]),
+      ...voiceNotes.flatMap((note) => [note.summary, note.transcription]),
+      immediateHelpRequest?.location,
+      immediateHelpRequest?.caregiverDistance,
+      immediateHelpRequest?.estimatedArrival,
+      'Accepted',
+      'Pending',
+      'Notifications are turned off in Settings.',
+      'Pickup',
+      'Requested',
+      'Status',
+      'Time',
+      'No time set',
+      'no time set',
+      'mins',
+      'Caring SG',
+      'AIC Caregiving Support',
+      'AIC Help for Caregivers',
+      'Club Heal',
+      'Mindful Community',
+      'SEA Lion Chatbot',
+      '1800-KAMPONG',
+      'support@kampongsg.com',
+      'Volunteer assigned',
+      'Awaiting volunteer',
+      'Your request'
+    ],
+    language,
+    accessToken
+  );
 
   useEffect(() => {
     if (user?.id && accessToken) {
@@ -44,7 +81,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
   async function loadLinkedPatient() {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-fd25410b/caregiver/${user.id}/patient`,
+        `${supabaseFunctionsApiBase}/caregiver/${user.id}/patient`,
         { headers: { 'Authorization': `Bearer ${accessToken}` } }
       );
 
@@ -64,15 +101,15 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
     try {
       const [tasksRes, notesRes, vitalsRes] = await Promise.all([
         fetch(
-          `https://${projectId}.supabase.co/functions/v1/make-server-fd25410b/patient/${patientId}/tasks`,
+          `${supabaseFunctionsApiBase}/patient/${patientId}/tasks`,
           { headers: { 'Authorization': `Bearer ${accessToken}` } }
         ),
         fetch(
-          `https://${projectId}.supabase.co/functions/v1/make-server-fd25410b/patient/${patientId}/voice-notes`,
+          `${supabaseFunctionsApiBase}/patient/${patientId}/voice-notes`,
           { headers: { 'Authorization': `Bearer ${accessToken}` } }
         ),
         fetch(
-          `https://${projectId}.supabase.co/functions/v1/make-server-fd25410b/patient/${patientId}/vitals`,
+          `${supabaseFunctionsApiBase}/patient/${patientId}/vitals`,
           { headers: { 'Authorization': `Bearer ${accessToken}` } }
         )
       ]);
@@ -99,8 +136,8 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
   async function loadCommunitySupport() {
     // Load scheduled community support sessions (for planning ahead)
     setCommunitySupport([
-      { id: 1, caregiverName: 'Sarah Tan', date: '2026-05-10', time: '14:00', duration: '2 hours', status: 'accepted', tasks: 'Accompany to doctor appointment' },
-      { id: 2, caregiverName: null, date: '2026-05-12', time: '10:00', duration: '3 hours', status: 'pending', tasks: 'Help with grocery shopping' }
+      { id: 1, caregiverName: 'Maria Wong', caregiverId: 'community_demo_1', requestedByUserId: user.id, date: '2026-05-10', time: '14:00', duration: '2 hours', status: 'accepted', tasks: 'Accompany to doctor appointment' },
+      { id: 2, caregiverName: null, caregiverId: null, requestedByUserId: user.id, date: '2026-05-12', time: '10:00', duration: '3 hours', status: 'pending', tasks: 'Help with grocery shopping' }
     ]);
   }
 
@@ -113,27 +150,27 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
 
   async function handleVoiceNote() {
     if (!accessibilitySettings.speechToText) {
-      alert('Speech-to-text is turned off in Settings.');
+      alert(t('alertSpeechToTextOff'));
       return;
     }
 
     if (!patientId) {
-      alert('No linked patient found for this voice note.');
+      alert(t('alertNoLinkedPatient'));
       return;
     }
 
     if (!isRecordingNote) {
       setIsRecordingNote(true);
       try {
-        alert('Voice note recording started.');
+        alert(t('alertVoiceRecordingStarted'));
         const transcript = await recordSpeechToText(language, accessToken);
         if (!transcript) {
-          alert('I could not transcribe that recording. Please try again.');
+          alert(t('alertTranscribeFailed'));
           return;
         }
 
         const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/make-server-fd25410b/voice-notes`,
+          `${supabaseFunctionsApiBase}/voice-notes`,
           {
             method: 'POST',
             headers: {
@@ -150,11 +187,11 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
 
         if (response.ok) {
           await loadPatientData(patientId);
-          alert('Voice note saved and shared with caregivers!');
+          alert(t('alertVoiceNoteSavedShared'));
         }
       } catch (error) {
         console.log('Voice note error:', error);
-        alert('Microphone or speech-to-text is not available.');
+        alert(t('alertMicrophoneUnavailable'));
       } finally {
         setIsRecordingNote(false);
       }
@@ -165,7 +202,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
 
   async function handleTextToSpeech(text) {
     if (!accessibilitySettings.textToSpeech) {
-      alert('Text-to-speech is turned off in Settings.');
+      alert(t('alertTextToSpeechOff'));
       return;
     }
 
@@ -178,37 +215,37 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
 
   async function handleReadWholePage() {
     if (!accessibilitySettings.textToSpeech) {
-      alert('Text-to-speech is turned off in Settings.');
+      alert(t('alertTextToSpeechOff'));
       return;
     }
 
-    let pageContent = `Welcome to KampongSG. Hi ${profile.name}, welcome back. `;
-    
+    let pageContent = `${t('speechPageIntro', { name: profile.name })} `;
+
     if (activeView === 'home') {
       if (myTasks.length > 0) {
-        pageContent += `My Tasks: `;
-        myTasks.forEach(task => {
-          pageContent += `${task.title} at ${task.time || 'no time set'}. `;
+        pageContent += t('speechSectionMyTasks');
+        myTasks.forEach((task) => {
+          pageContent += ` ${dt(task.title)} ${t('at')} ${task.time || dt('no time set')}. `;
         });
       }
-      
+
       if (tasks.length > 0) {
-        pageContent += `Patient's Tasks: `;
-        tasks.forEach(task => {
-          pageContent += `${task.title} at ${task.time || 'no time set'}. `;
+        pageContent += t('speechSectionPatientTasks');
+        tasks.forEach((task) => {
+          pageContent += ` ${dt(task.title)} ${t('at')} ${task.time || dt('no time set')}. `;
         });
       }
-      
+
       if (communitySupport.length > 0) {
-        pageContent += `Scheduled Community Support: `;
-        communitySupport.forEach(session => {
-          pageContent += `${session.caregiverName} on ${session.date} at ${session.time} for ${session.duration}. Status: ${session.status}. `;
+        pageContent += t('speechSectionScheduledSupport');
+        communitySupport.forEach((session) => {
+          pageContent += ` ${session.caregiverName || ''} ${session.date} ${t('at')} ${session.time} ${dt(session.duration)}. ${dt('Status')}: ${dt(session.status)}. `;
         });
       }
     } else if (activeView === 'notifications') {
-      pageContent += `Notifications: `;
-      visibleNotifications.forEach(notif => {
-        pageContent += `${notif.message}. ${notif.time}. `;
+      pageContent += `${t('notifications')} `;
+      visibleNotifications.forEach((notif) => {
+        pageContent += `${dt(notif.message)}. ${dt(notif.time)}. `;
       });
     }
     
@@ -256,32 +293,42 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
     setPatientLocation(null);
   }
 
+  function normalizeName(name = '') {
+    return name
+      .toLowerCase()
+      .replace(/\([^)]*\)/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function isAssignedToPrimaryCaregiver(session) {
+    if (!session) return false;
+    if (session.caregiverId && session.caregiverId === user?.id) return true;
+    const assignedName = normalizeName(session.caregiverName);
+    const primaryName = normalizeName(profile?.name);
+    return Boolean(assignedName && primaryName && assignedName === primaryName);
+  }
+
+  function hasAssignedVolunteer(session) {
+    return session.status === 'accepted' && session.caregiverName && !isAssignedToPrimaryCaregiver(session);
+  }
+
   return (
     <div className="size-full bg-white flex flex-col">
       {/* Top Bar */}
       <div className="text-white px-4 py-3 flex items-center justify-between shadow-md" style={{ background: '#4A9EFF' }}>
         <div className="flex items-center gap-2">
           <LayoutGrid className="w-6 h-6" />
-          <h1 className="text-xl font-bold">KampongSG</h1>
+          <h1 className="text-xl font-bold">{t('brandName')}</h1>
         </div>
         <div className="flex items-center gap-3">
           <button
             onClick={handleReadWholePage}
             disabled={!accessibilitySettings.textToSpeech}
             className="p-2 hover:bg-white/20 rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            title="Read Whole Page"
+            title={t('tooltipReadWholePage')}
           >
             <Volume2 className="w-6 h-6" />
-          </button>
-          <button
-            onClick={handleVoiceNote}
-            disabled={!accessibilitySettings.speechToText}
-            className={`relative p-2 rounded-full transition-colors ${
-              isRecordingNote ? 'bg-red-500 animate-pulse' : 'hover:bg-white/20'
-            } disabled:opacity-40 disabled:cursor-not-allowed`}
-            title="Voice Note"
-          >
-            <Mic className="w-6 h-6" />
           </button>
           <button
             onClick={() => setActiveView('notifications')}
@@ -349,7 +396,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                     style={{ hover: { backgroundColor: '#D0EBFF' } }}
                     onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#D0EBFF'}
                     onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                    title="Refresh"
+                    title={t('tooltipRefresh')}
                   >
                     <RefreshCw className="w-5 h-5 text-gray-600" />
                   </button>
@@ -358,7 +405,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                     className="p-2 rounded-lg transition-colors"
                     onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#D0EBFF'}
                     onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                    title="Add Task"
+                    title={t('tooltipAddTask')}
                   >
                     <Plus className="w-5 h-5 text-gray-600" />
                   </button>
@@ -387,24 +434,24 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                       className="px-4 py-4 flex items-center gap-4 hover:bg-gray-50 transition-colors"
                     >
                       <button
-                        onClick={() => handleTextToSpeech(`${task.title}. Time: ${task.time || 'No time set'}`)}
+                        onClick={() => handleTextToSpeech(`${dt(task.title)}. ${dt('Time')}: ${task.time || dt('No time set')}`)}
                         className="p-2 hover:bg-blue-100 rounded-lg transition-colors flex-shrink-0"
-                        title="Read aloud"
+                        title={t('readAloud')}
                       >
                         <Volume2 className="w-5 h-5 text-blue-600" />
                       </button>
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-1">
-                          <span className="text-base font-semibold text-gray-800">{task.title}</span>
+                          <span className="text-base font-semibold text-gray-800">{dt(task.title)}</span>
                           <div className="flex gap-1">
                             {task.videoUrl && (
                               <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded flex items-center gap-1">
-                                <Video className="w-3 h-3" /> Video
+                                <Video className="w-3 h-3" /> {t('labelVideo')}
                               </span>
                             )}
                             {task.imageUrl && (
                               <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded flex items-center gap-1">
-                                <ImageIcon className="w-3 h-3" /> Image
+                                <ImageIcon className="w-3 h-3" /> {t('labelImage')}
                               </span>
                             )}
                           </div>
@@ -437,14 +484,14 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                   <button
                     onClick={handleRefresh}
                     className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
-                    title="Refresh"
+                    title={t('tooltipRefresh')}
                   >
                     <RefreshCw className="w-5 h-5 text-gray-600" />
                   </button>
                   <button
                     onClick={() => setShowTaskManager(true)}
                     className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
-                    title="Add Task"
+                    title={t('tooltipAddTask')}
                   >
                     <Plus className="w-5 h-5 text-gray-600" />
                   </button>
@@ -473,24 +520,24 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                       className="px-4 py-4 flex items-center gap-4 hover:bg-gray-50 transition-colors"
                     >
                       <button
-                        onClick={() => handleTextToSpeech(`${task.title}. Time: ${task.time || 'No time set'}`)}
+                        onClick={() => handleTextToSpeech(`${dt(task.title)}. ${dt('Time')}: ${task.time || dt('No time set')}`)}
                         className="p-2 hover:bg-blue-100 rounded-lg transition-colors flex-shrink-0"
-                        title="Read aloud"
+                        title={t('readAloud')}
                       >
                         <Volume2 className="w-5 h-5 text-blue-600" />
                       </button>
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-1">
-                          <span className="text-base font-semibold text-gray-800">{task.title}</span>
+                          <span className="text-base font-semibold text-gray-800">{dt(task.title)}</span>
                           <div className="flex gap-1">
                             {task.videoUrl && (
                               <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded flex items-center gap-1">
-                                <Video className="w-3 h-3" /> Video
+                                <Video className="w-3 h-3" /> {t('labelVideo')}
                               </span>
                             )}
                             {task.imageUrl && (
                               <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded flex items-center gap-1">
-                                <ImageIcon className="w-3 h-3" /> Image
+                                <ImageIcon className="w-3 h-3" /> {t('labelImage')}
                               </span>
                             )}
                           </div>
@@ -525,7 +572,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                 <button
                   onClick={() => setShowCommunitySupportScheduler(true)}
                   className="p-2 hover:bg-purple-100 rounded-lg transition-colors"
-                  title="Schedule Support"
+                  title={t('tooltipScheduleSupport')}
                 >
                   <Plus className="w-5 h-5 text-gray-600" />
                 </button>
@@ -552,12 +599,12 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <div className="flex items-center gap-3 mb-2">
-                            {session.status === 'accepted' ? (
+                            {hasAssignedVolunteer(session) ? (
                               <>
                                 <Users className="w-5 h-5 text-purple-600" />
                                 <span className="text-base font-semibold text-gray-800">{session.caregiverName}</span>
                                 <span className="text-xs px-2 py-1 rounded-full font-semibold bg-green-100 text-green-700">
-                                  Accepted
+                                  {dt('Volunteer assigned')}
                                 </span>
                               </>
                             ) : (
@@ -565,20 +612,21 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                                 <Users className="w-5 h-5 text-gray-400" />
                                 <span className="text-base font-semibold text-gray-600">{t('waitingCaregiver')}</span>
                                 <span className="text-xs px-2 py-1 rounded-full font-semibold bg-orange-100 text-orange-700">
-                                  Pending
+                                  {dt('Awaiting volunteer')}
                                 </span>
                               </>
                             )}
                           </div>
+                          <p className="text-xs text-purple-700 ml-8 mb-2">{dt('Your request')}</p>
                           <div className="flex items-center gap-4 text-sm text-gray-600 ml-8 mb-1">
                             <span className="flex items-center gap-1">
                               <Clock className="w-4 h-4" />
-                              {session.date} at {session.time}
+                              {session.date} {t('at')} {session.time}
                             </span>
-                            <span>Duration: {session.duration}</span>
+                            <span>{t('duration')}: {dt(session.duration)}</span>
                           </div>
                           {session.tasks && (
-                            <p className="text-sm text-gray-600 ml-8">📋 {session.tasks}</p>
+                            <p className="text-sm text-gray-600 ml-8">📋 {dt(session.tasks)}</p>
                           )}
                         </div>
                       </div>
@@ -601,7 +649,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
             </button>
             <h2 className="text-2xl font-bold text-gray-800 mb-4">{t('notifications')}</h2>
             {!accessibilitySettings.notifications ? (
-              <p className="text-gray-500 text-center py-8">Notifications are turned off in Settings.</p>
+              <p className="text-gray-500 text-center py-8">{dt('Notifications are turned off in Settings.')}</p>
             ) : visibleNotifications.length === 0 ? (
               <p className="text-gray-500 text-center py-8">{t('noNotifications')}</p>
             ) : (
@@ -613,14 +661,14 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                   >
                     <div className="flex items-start gap-3">
                       <button
-                        onClick={() => handleTextToSpeech(notification.message)}
+                        onClick={() => handleTextToSpeech(dt(notification.message))}
                         className="p-2 hover:bg-red-100 rounded-lg transition-colors flex-shrink-0"
-                        title="Read aloud"
+                        title={t('readAloud')}
                       >
                         <Volume2 className="w-5 h-5 text-red-600" />
                       </button>
                       <div className="flex-1">
-                        <p className="font-bold text-red-900 text-lg mb-2">{notification.message}</p>
+                        <p className="font-bold text-red-900 text-lg mb-2">{dt(notification.message)}</p>
                         {notification.location && (
                           <button
                             onClick={() => handleCheckLocation(notification)}
@@ -630,12 +678,12 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                             {t('checkLocation')}
                           </button>
                         )}
-                        <p className="text-xs text-gray-600 mt-2">{notification.time}</p>
+                        <p className="text-xs text-gray-600 mt-2">{dt(notification.time)}</p>
                       </div>
                       <button
                         onClick={() => handleDismissNotification(notification.id)}
                         className="p-2 hover:bg-red-100 rounded-lg transition-colors"
-                        title="Dismiss"
+                        title={t('tooltipDismiss')}
                       >
                         <X className="w-5 h-5 text-red-600" />
                       </button>
@@ -659,14 +707,14 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                   ← {t('backToHome')}
                 </button>
                 <h2 className="text-2xl font-bold text-gray-800 mb-4">{t('communitySupport')}</h2>
-                <p className="text-gray-600 mb-6">Request immediate help from nearby community caregivers</p>
+                <p className="text-gray-600 mb-6">{t('helpImmediateIntro')}</p>
                 
                 {/* Grab-style Map Placeholder */}
                 <div className="bg-gray-100 rounded-2xl overflow-hidden mb-6 relative" style={{ height: '400px' }}>
                   <div className="absolute inset-0 flex items-center justify-center">
                     <div className="text-center">
                       <MapPin className="w-16 h-16 text-gray-400 mx-auto mb-2" />
-                      <p className="text-gray-500">Map shows your location<br/>and nearby caregivers</p>
+                      <p className="text-gray-500">{t('mapShowsLocation')}<br />{t('mapShowsCaregivers')}</p>
                     </div>
                   </div>
                   {/* Simulated map pin for current location */}
@@ -687,7 +735,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                 </button>
 
                 <p className="text-xs text-gray-500 text-center mt-4">
-                  For planned support beyond the next 6-12 hours, use "Scheduled Community Support" on the home screen
+                  {t('plannedSupportHint')}
                 </p>
               </div>
             ) : (
@@ -707,7 +755,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                       <MapPin className="w-10 h-10 text-white" />
                     </div>
                     <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 whitespace-nowrap bg-white px-3 py-1 rounded-full shadow-md text-sm font-semibold">
-                      {immediateHelpRequest.location}
+                      {dt(immediateHelpRequest.location)}
                     </div>
                   </div>
 
@@ -738,7 +786,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                         <div className="absolute inset-0 border-4 border-purple-600 rounded-full animate-spin" style={{ borderTopColor: 'transparent' }}></div>
                       </div>
                       <h3 className="text-xl font-bold text-gray-800 mb-2">{t('findingCaregivers')}</h3>
-                      <p className="text-gray-600 mb-6">Please wait while we match you with an available community caregiver</p>
+                      <p className="text-gray-600 mb-6">{t('findingCaregiversBody')}</p>
                       <button
                         onClick={handleCancelRequest}
                         className="w-full bg-gray-100 text-gray-700 py-4 rounded-2xl font-semibold hover:bg-gray-200 transition-colors"
@@ -754,22 +802,22 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                         </div>
                         <div className="flex-1">
                           <h3 className="text-xl font-bold text-gray-800">{immediateHelpRequest.caregiverName}</h3>
-                          <p className="text-green-600 font-semibold">{immediateHelpRequest.caregiverDistance} • {immediateHelpRequest.estimatedArrival}</p>
+                          <p className="text-green-600 font-semibold">{dt(immediateHelpRequest.caregiverDistance)} • {dt(immediateHelpRequest.estimatedArrival)}</p>
                         </div>
                         <div className="text-center">
                           <div className="text-3xl font-bold text-gray-800">{immediateHelpRequest.estimatedArrival?.split(' ')[0]}</div>
-                          <div className="text-xs text-gray-500">mins</div>
+                          <div className="text-xs text-gray-500">{dt('mins')}</div>
                         </div>
                       </div>
 
                       <div className="space-y-3 mb-6">
                         <div className="flex items-center gap-3 text-gray-700">
                           <MapPin className="w-5 h-5 text-gray-400" />
-                          <span className="text-sm">Pickup: {immediateHelpRequest.location}</span>
+                          <span className="text-sm">{dt('Pickup')}: {dt(immediateHelpRequest.location)}</span>
                         </div>
                         <div className="flex items-center gap-3 text-gray-700">
                           <Clock className="w-5 h-5 text-gray-400" />
-                          <span className="text-sm">Requested: {new Date(immediateHelpRequest.requestedAt).toLocaleTimeString()}</span>
+                          <span className="text-sm">{dt('Requested')}: {new Date(immediateHelpRequest.requestedAt).toLocaleTimeString()}</span>
                         </div>
                       </div>
 
@@ -847,7 +895,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
               <div className="space-y-3">
                 {voiceNotes.map((note) => (
                   <div key={note.id} className="bg-white border-2 border-gray-200 rounded-2xl p-4">
-                    <p className="text-gray-800">{note.summary || note.transcription}</p>
+                    <p className="text-gray-800">{dt(note.summary || note.transcription)}</p>
                     <p className="text-xs text-gray-500 mt-2">
                       {new Date(note.createdAt).toLocaleString()}
                     </p>
@@ -873,7 +921,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {/* Contact Us */}
               <button
-                onClick={() => alert('📞 Contact Us\n\nPhone: 1800-KAMPONG\nEmail: support@kampongsg.com\n\nOur team is available 24/7 to assist you!')}
+                onClick={() => alert(t('alertContactUs'))}
                 className="bg-white border-2 border-gray-200 rounded-2xl p-6 flex flex-col items-center gap-3 hover:border-blue-400 hover:shadow-lg transition-all active:scale-95"
               >
                 <Phone className="w-16 h-16 text-blue-600" />
@@ -882,7 +930,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
 
               {/* Support */}
               <button
-                onClick={() => alert('🔗 Support Resources\n\nCaregiving support groups\nhttps://www.caring.sg/\nhttps://www.aic.sg/Caregiving-Support/Connecting-with-other-caregivers\n\nHelpline (RED)\n\nClub Heal - 6899 3463\nMindful community - 6460 4400')}
+                onClick={() => alert(t('alertSupportLinks'))}
                 className="bg-white border-2 border-gray-200 rounded-2xl p-6 flex flex-col items-center gap-3 hover:border-purple-400 hover:shadow-lg transition-all active:scale-95"
               >
                 <Heart className="w-16 h-16 text-purple-600" />
@@ -919,9 +967,9 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                 <div className="flex items-start gap-3">
                   <Volume2 className="w-8 h-8 flex-shrink-0" style={{ color: '#4A9EFF' }} />
                   <div>
-                    <h3 className="text-lg font-bold text-gray-800 mb-2">Listen to Any Text</h3>
-                    <p className="text-gray-700 text-sm mb-2">Tap the <Volume2 className="w-4 h-4 inline" /> speaker icon next to any task or notification to hear it read aloud in your preferred language.</p>
-                    <p className="text-gray-600 text-xs">Supports: English, Mandarin, Hokkien, Cantonese, Malay, Tamil</p>
+                    <h3 className="text-lg font-bold text-gray-800 mb-2">{t('helpListenTitle')}</h3>
+                    <p className="text-gray-700 text-sm mb-2">{t('helpListenBody')}</p>
+                    <p className="text-gray-600 text-xs">{t('helpLanguageSupport')}</p>
                   </div>
                 </div>
               </div>
@@ -931,8 +979,8 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                 <div className="flex items-start gap-3">
                   <Mic className="w-8 h-8 flex-shrink-0 text-red-500" />
                   <div>
-                    <h3 className="text-lg font-bold text-gray-800 mb-2">Record Voice Notes</h3>
-                    <p className="text-gray-700 text-sm">Tap the <Mic className="w-4 h-4 inline" /> microphone icon at the top to record voice messages for your patient or other caregivers.</p>
+                    <h3 className="text-lg font-bold text-gray-800 mb-2">{t('helpVoiceTitle')}</h3>
+                    <p className="text-gray-700 text-sm">{t('helpVoiceBody')}</p>
                   </div>
                 </div>
               </div>
@@ -942,12 +990,12 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                 <div className="flex items-start gap-3">
                   <CheckCircle className="w-8 h-8 flex-shrink-0 text-green-600" />
                   <div>
-                    <h3 className="text-lg font-bold text-gray-800 mb-2">Manage Tasks</h3>
-                    <p className="text-gray-700 text-sm mb-2">Create tasks for your patient or yourself. Tasks can include:</p>
+                    <h3 className="text-lg font-bold text-gray-800 mb-2">{t('helpTasksTitle')}</h3>
+                    <p className="text-gray-700 text-sm mb-2">{t('helpTasksBody')}</p>
                     <ul className="text-gray-700 text-sm space-y-1 ml-4">
-                      <li>• Video instructions</li>
-                      <li>• Image guides</li>
-                      <li>• Scheduled reminders</li>
+                      <li>{t('taskGuideVideoBullet')}</li>
+                      <li>{t('taskGuideImageBullet')}</li>
+                      <li>{t('taskGuideReminderBullet')}</li>
                     </ul>
                   </div>
                 </div>
@@ -959,11 +1007,11 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                   <Users className="w-8 h-8 flex-shrink-0 text-purple-600" />
                   <div>
                     <h3 className="text-lg font-bold text-gray-800 mb-2">{t('requestHelpNow')}</h3>
-                    <p className="text-gray-700 text-sm mb-2">Tap "Community Support" for urgent help within 6-12 hours:</p>
+                    <p className="text-gray-700 text-sm mb-2">{t('helpImmediateBody')}</p>
                     <ul className="text-gray-700 text-sm space-y-1 ml-4">
-                      <li>• See nearby caregivers on map</li>
-                      <li>• Request help with one tap</li>
-                      <li>• Track caregiver arrival time</li>
+                      <li>{t('helpImmediateBullet1')}</li>
+                      <li>{t('helpImmediateBullet2')}</li>
+                      <li>{t('helpImmediateBullet3')}</li>
                     </ul>
                   </div>
                 </div>
@@ -975,7 +1023,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                   <Calendar className="w-8 h-8 flex-shrink-0 text-purple-600" />
                   <div>
                     <h3 className="text-lg font-bold text-gray-800 mb-2">{t('scheduledSupport')}</h3>
-                    <p className="text-gray-700 text-sm">For planned help beyond 12 hours, use "Scheduled Community Support" on the home screen to book caregivers in advance.</p>
+                    <p className="text-gray-700 text-sm">{t('helpScheduledBody')}</p>
                   </div>
                 </div>
               </div>
@@ -986,7 +1034,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                   <Activity className="w-8 h-8 flex-shrink-0 text-blue-600" />
                   <div>
                     <h3 className="text-lg font-bold text-gray-800 mb-2">{t('vitals')}</h3>
-                    <p className="text-gray-700 text-sm">Monitor blood pressure, heart rate, and other health metrics. Data is shared with medical professionals.</p>
+                    <p className="text-gray-700 text-sm">{t('helpVitalsBody')}</p>
                   </div>
                 </div>
               </div>
@@ -997,7 +1045,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                   <Bell className="w-8 h-8 flex-shrink-0 text-red-600" />
                   <div>
                     <h3 className="text-lg font-bold text-gray-800 mb-2">{t('notifications')}</h3>
-                    <p className="text-gray-700 text-sm">Receive alerts when your patient leaves home, misses medication, or needs assistance. Tap <X className="w-4 h-4 inline" /> to dismiss notifications.</p>
+                    <p className="text-gray-700 text-sm">{t('helpNotificationsBody')}</p>
                   </div>
                 </div>
               </div>
@@ -1008,12 +1056,12 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                   <Settings className="w-8 h-8 flex-shrink-0 text-gray-600" />
                   <div>
                     <h3 className="text-lg font-bold text-gray-800 mb-2">{t('settings')}</h3>
-                    <p className="text-gray-700 text-sm mb-2">Tap <Settings className="w-4 h-4 inline" /> in the top right to:</p>
+                    <p className="text-gray-700 text-sm mb-2">{t('helpSettingsBody')}</p>
                     <ul className="text-gray-700 text-sm space-y-1 ml-4">
-                      <li>• Change language preference</li>
-                      <li>• Adjust font size</li>
-                      <li>• Enable text-to-speech</li>
-                      <li>• Manage emergency contacts</li>
+                      <li>{t('helpSettingsBullet1')}</li>
+                      <li>{t('helpSettingsBullet2')}</li>
+                      <li>{t('helpSettingsBullet3')}</li>
+                      <li>{t('helpSettingsBullet4')}</li>
                     </ul>
                   </div>
                 </div>
@@ -1023,7 +1071,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
             {/* Need More Help */}
             <div className="mt-6 bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-gray-200 rounded-2xl p-6 text-center">
               <h3 className="text-lg font-bold text-gray-800 mb-3">{t('needMoreHelp')}</h3>
-              <p className="text-gray-700 text-sm mb-4">Our support team is here 24/7</p>
+              <p className="text-gray-700 text-sm mb-4">{t('supportTeamAlwaysHere')}</p>
               <button
                 onClick={() => setActiveView('resources')}
                 className="px-6 py-3 text-white rounded-xl font-semibold transition-all hover:shadow-lg"
@@ -1175,7 +1223,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
 
             <div className="grid grid-cols-2 gap-3">
               <button
-                onClick={() => alert('📞 Calling patient...')}
+                onClick={() => alert(t('alertCallingPatient'))}
                 className="py-4 rounded-2xl font-semibold transition-colors flex items-center justify-center gap-2 text-white"
                 style={{ backgroundColor: '#4A9EFF' }}
               >
@@ -1183,7 +1231,9 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                 {t('callPatient')}
               </button>
               <button
-                onClick={() => alert('🚗 Opening navigation to ' + patientLocation.name)}
+                onClick={() =>
+                  alert(t('alertOpeningNavigation', { place: patientLocation.name || '' }))
+                }
                 className="bg-purple-600 text-white py-4 rounded-2xl font-semibold hover:bg-purple-700 transition-colors flex items-center justify-center gap-2"
               >
                 <MapPin className="w-5 h-5" />

@@ -12,7 +12,7 @@ app.use(
   "/*",
   cors({
     origin: "*",
-    allowHeaders: ["Content-Type", "Authorization"],
+    allowHeaders: ["Content-Type", "Authorization", "apikey", "x-client-info"],
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     exposeHeaders: ["Content-Length"],
     maxAge: 600,
@@ -35,6 +35,8 @@ async function getAuthenticatedUser(authHeader: string | null) {
 }
 
 const SEA_LION_MODEL = Deno.env.get('CLOUDFLARE_SEA_LION_MODEL') || '@cf/aisingapore/gemma-sea-lion-v4-27b-it';
+const SEA_LION_API_BASE = Deno.env.get('CLOUDFLARE_SEA_LION_API_BASE') || Deno.env.get('SEA_LION_API_BASE');
+const SEA_LION_API_KEY = Deno.env.get('CLOUDFLARE_SEA_LION_API_KEY') || Deno.env.get('SEA_LION_API_KEY');
 const STT_MODEL = Deno.env.get('CLOUDFLARE_STT_MODEL') || '@cf/openai/whisper';
 const TTS_MODEL = Deno.env.get('CLOUDFLARE_TTS_MODEL') || '@cf/myshell-ai/melotts';
 const ttsLanguageMap: Record<string, string> = {
@@ -69,8 +71,65 @@ async function runCloudflareAi(model: string, body: BodyInit, contentType: strin
   });
 }
 
+async function parseResponseJsonSafely(resp: Response) {
+  const text = await resp.text();
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    return { _nonJsonBody: text.slice(0, 500) } as Record<string, unknown>;
+  }
+}
+
+async function runSeaLionChat(messages: Array<{ role: string; content: string }>) {
+  if (SEA_LION_API_BASE) {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json'
+    };
+    if (SEA_LION_API_KEY) {
+      headers.Authorization = `Bearer ${SEA_LION_API_KEY}`;
+    }
+
+    const response = await fetch(`${SEA_LION_API_BASE.replace(/\/$/, '')}/chat`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ messages })
+    });
+    const data = await parseResponseJsonSafely(response);
+    return { response, data };
+  }
+
+  const response = await runCloudflareAi(
+    SEA_LION_MODEL,
+    JSON.stringify({ messages }),
+    'application/json'
+  );
+  const data = await parseResponseJsonSafely(response);
+  return { response, data };
+}
+
+async function runSeaLionWorkerEndpoint(path: string, body: unknown) {
+  if (!SEA_LION_API_BASE) return null;
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json'
+  };
+  if (SEA_LION_API_KEY) {
+    headers.Authorization = `Bearer ${SEA_LION_API_KEY}`;
+  }
+
+  return fetch(`${SEA_LION_API_BASE.replace(/\/$/, '')}${path}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body)
+  });
+}
+
 function textFromWorkersAiResult(payload: any) {
-  const result = payload?.result ?? payload;
+  if (typeof payload === 'string' && payload.trim()) return payload;
+
+  const result = payload?.result ?? payload?.data ?? payload;
+  if (typeof result === 'string' && result.trim()) return result;
+
   return result?.response
     || result?.text
     || result?.generated_text
@@ -78,6 +137,73 @@ function textFromWorkersAiResult(payload: any) {
     || result?.choices?.[0]?.message?.content
     || result?.choices?.[0]?.text
     || '';
+}
+
+/** Parses first JSON object or array from model text (models often wrap JSON in prose or markdown). */
+function extractStructuredJson(text: string): unknown {
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1];
+  const candidate = (fenced || text).trim();
+
+  const tryParse = (slice: string) => {
+    try {
+      return JSON.parse(slice);
+    } catch {
+      return null;
+    }
+  };
+
+  const objStart = candidate.indexOf('{');
+  const objEnd = candidate.lastIndexOf('}');
+  if (objStart !== -1 && objEnd > objStart) {
+    const parsed = tryParse(candidate.slice(objStart, objEnd + 1));
+    if (parsed && typeof parsed === 'object') return parsed;
+  }
+
+  const arrStart = candidate.indexOf('[');
+  const arrEnd = candidate.lastIndexOf(']');
+  if (arrStart !== -1 && arrEnd > arrStart) {
+    const parsed = tryParse(candidate.slice(arrStart, arrEnd + 1));
+    if (Array.isArray(parsed)) return parsed;
+  }
+
+  return null;
+}
+
+function buildTranslationsFromStructuredPayload(structured: unknown, uniqueTexts: string[]) {
+  if (Array.isArray(structured)) {
+    return Object.fromEntries(
+      uniqueTexts.map((source, index) => {
+        const v = structured[index];
+        const s = typeof v === 'string' && v.trim() ? v.trim() : '...';
+        return [source, s];
+      })
+    );
+  }
+
+  const obj =
+    structured && typeof structured === 'object' && !Array.isArray(structured)
+      ? (structured as Record<string, unknown>)
+      : null;
+
+  if (!obj) {
+    return Object.fromEntries(uniqueTexts.map((text) => [text, '...']));
+  }
+
+  const tKeysSorted = Object.keys(obj)
+    .filter((k) => /^t\d+$/i.test(k))
+    .sort((a, b) => Number(a.replace(/^t/i, '')) - Number(b.replace(/^t/i, '')));
+
+  return Object.fromEntries(
+    uniqueTexts.map((source, index) => {
+      let v = obj[`t${index}`] ?? obj[`T${index}`];
+      if (typeof v !== 'string' || !v.trim()) {
+        const keyAt = tKeysSorted[index];
+        if (keyAt) v = obj[keyAt];
+      }
+      const s = typeof v === 'string' && v.trim() ? v.trim() : '...';
+      return [source, s];
+    })
+  );
 }
 
 function base64ToBytes(base64: string) {
@@ -357,12 +483,7 @@ app.post("/make-server-fd25410b/ai/sea-lion", async (c) => {
           { role: 'user', content: prompt || '' }
         ];
 
-    const response = await runCloudflareAi(
-      SEA_LION_MODEL,
-      JSON.stringify({ messages: requestMessages }),
-      'application/json'
-    );
-    const data = await response.json();
+    const { response, data } = await runSeaLionChat(requestMessages);
 
     if (!response.ok || data?.success === false) {
       return c.json({ error: data?.errors?.[0]?.message || 'SEA-LION request failed' }, 502);
@@ -371,10 +492,83 @@ app.post("/make-server-fd25410b/ai/sea-lion", async (c) => {
     return c.json({
       text: textFromWorkersAiResult(data),
       model: SEA_LION_MODEL,
-      provider: 'cloudflare-workers-ai'
+      provider: SEA_LION_API_BASE ? 'cloudflare-worker-api' : 'cloudflare-workers-ai'
     });
   } catch (error) {
     console.log(`SEA-LION error: ${error}`);
+    return c.json({ error: String(error) }, 500);
+  }
+});
+
+app.post("/make-server-fd25410b/ai/translate", async (c) => {
+  const user = await getAuthenticatedUser(c.req.header('Authorization'));
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+  try {
+    const { texts = [], language = 'en-sg' } = await c.req.json();
+    const uniqueTexts = Array.from(new Set(
+      (Array.isArray(texts) ? texts : [])
+        .map((text) => String(text || '').trim())
+        .filter(Boolean)
+    )).slice(0, 80);
+
+    if (language === 'en-sg' || uniqueTexts.length === 0) {
+      return c.json({
+        translations: Object.fromEntries(uniqueTexts.map((text) => [text, text])),
+        model: SEA_LION_MODEL
+      });
+    }
+
+    const numberedTexts = Object.fromEntries(uniqueTexts.map((text, index) => [`t${index}`, text]));
+    const targetLanguageDescription = {
+      'zh-sg': 'Singapore Mandarin Chinese',
+      'zh-min': 'Singapore Hokkien written mainly with Chinese characters, not romanised dialect',
+      'zh-yue': 'Cantonese written in traditional Chinese characters',
+      'ms-sg': 'Singapore Malay',
+      'ta-sg': 'Tamil'
+    }[language] || language;
+
+    const prompt = [
+      `Translate every JSON value into ${targetLanguageDescription}.`,
+      'Return ONLY a valid compact JSON object with the exact same keys.',
+      'Do not include markdown, explanations, or extra keys.',
+      'Preserve numbers, dates, times, phone numbers, URLs, and IDs.',
+      'Localise common nouns, statuses, tasks, notification messages, addresses, and honorifics.',
+      'For names, transliterate/localise common honorific words only when natural. Do not leave English unless it is an unavoidable proper noun.',
+      'Input JSON:',
+      JSON.stringify(numberedTexts)
+    ].join('\n');
+
+    const { response, data } = await runSeaLionChat([
+      {
+        role: 'system',
+        content: 'You are a precise Singapore multilingual UI localisation engine.'
+      },
+      { role: 'user', content: prompt }
+    ]);
+
+    const modelText = textFromWorkersAiResult(data);
+    if (
+      !response.ok
+      || data?.success === false
+      || (typeof data?.error === 'string' && data.error && !modelText.trim())
+    ) {
+      const message = typeof data?.error === 'string' && data.error
+        ? data.error
+        : (data?.errors as Array<{ message?: string }> | undefined)?.[0]?.message;
+      return c.json({ error: message || 'SEA-LION translation failed' }, 502);
+    }
+
+    const structured = extractStructuredJson(modelText);
+    const translations = buildTranslationsFromStructuredPayload(structured, uniqueTexts);
+
+    return c.json({
+      translations,
+      model: SEA_LION_MODEL,
+      provider: SEA_LION_API_BASE ? 'cloudflare-worker-api' : 'cloudflare-workers-ai'
+    });
+  } catch (error) {
+    console.log(`SEA-LION translation error: ${error}`);
     return c.json({ error: String(error) }, 500);
   }
 });
@@ -387,7 +581,8 @@ app.post("/make-server-fd25410b/ai/stt", async (c) => {
     const { audioBase64, mimeType = 'audio/webm', language = 'en-sg' } = await c.req.json();
     if (!audioBase64) return c.json({ error: "Missing audioBase64" }, 400);
 
-    const response = await runCloudflareAi(STT_MODEL, base64ToBytes(audioBase64), mimeType);
+    const response = await runSeaLionWorkerEndpoint('/stt', { audioBase64, mimeType, language })
+      || await runCloudflareAi(STT_MODEL, base64ToBytes(audioBase64), mimeType);
     const data = await response.json();
 
     if (!response.ok || data?.success === false) {
@@ -398,7 +593,7 @@ app.post("/make-server-fd25410b/ai/stt", async (c) => {
       text: textFromWorkersAiResult(data),
       language,
       model: STT_MODEL,
-      provider: 'cloudflare-workers-ai'
+      provider: SEA_LION_API_BASE ? 'cloudflare-worker-api' : 'cloudflare-workers-ai'
     });
   } catch (error) {
     console.log(`STT error: ${error}`);
@@ -419,7 +614,8 @@ app.post("/make-server-fd25410b/ai/tts", async (c) => {
       lang: ttsLanguageMap[language] || 'en',
       voice
     };
-    const response = await runCloudflareAi(TTS_MODEL, JSON.stringify(body), 'application/json');
+    const response = await runSeaLionWorkerEndpoint('/tts', { text, language, voice })
+      || await runCloudflareAi(TTS_MODEL, JSON.stringify(body), 'application/json');
     const contentType = response.headers.get('content-type') || 'audio/mpeg';
 
     if (!response.ok) {

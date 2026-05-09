@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "dev": "vite"
+    "dev": "vite",
+    "sealion:dev": "npm --prefix cloudflare/sea-lion-worker run dev",
+    "sealion:deploy": "npm --prefix cloudflare/sea-lion-worker run deploy"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",

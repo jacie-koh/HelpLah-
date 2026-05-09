@@ -1,7 +1,7 @@
 import { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Globe, Bell, Home, User, LogOut, Save, Mic, Volume2, Type, Phone } from 'lucide-react';
-import { projectId } from '../../../utils/supabase/info.tsx';
+import { supabaseFunctionsApiBase } from '../../../utils/supabase/api';
 import { LanguageContext } from '../App';
 import { getTranslation } from '../utils/translations';
 
@@ -43,7 +43,7 @@ export function SettingsScreen({ user, profile, accessToken, onSignOut }) {
   async function loadSettings() {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-fd25410b/settings`,
+        `${supabaseFunctionsApiBase}/settings`,
         {
           headers: {
             'Authorization': `Bearer ${accessToken}`
@@ -81,7 +81,8 @@ export function SettingsScreen({ user, profile, accessToken, onSignOut }) {
     }
   }
 
-  const t = (key) => getTranslation(localLanguage, key);
+  const t = (key: string, vars?: Record<string, string | number>) =>
+    getTranslation(localLanguage, key, vars);
   const roleLabel = {
     patient: t('patient'),
     primary_caregiver: t('primaryCaregiver'),
@@ -92,7 +93,7 @@ export function SettingsScreen({ user, profile, accessToken, onSignOut }) {
     setSaving(true);
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-fd25410b/settings`,
+        `${supabaseFunctionsApiBase}/settings`,
         {
           method: 'POST',
           headers: {

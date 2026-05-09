@@ -1,9 +1,10 @@
 import { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell, Mic, AlertCircle, Settings, CheckCircle, Video, Home, LayoutGrid } from 'lucide-react';
-import { projectId } from '../../../utils/supabase/info.tsx';
+import { supabaseFunctionsApiBase } from '../../../utils/supabase/api';
 import { LanguageContext } from '../App';
 import { getTranslation } from '../utils/translations';
+import { useDynamicTranslations } from '../utils/dynamicTranslations';
 import { recordSpeechToText } from '../utils/voice';
 
 export function PatientView({ user, profile, accessToken }) {
@@ -13,7 +14,13 @@ export function PatientView({ user, profile, accessToken }) {
   const [isHome, setIsHome] = useState(true);
   const navigate = useNavigate();
   const { language, accessibilitySettings } = useContext(LanguageContext);
-  const t = (key) => getTranslation(language, key);
+  const t = (key: string, vars?: Record<string, string | number>) =>
+    getTranslation(language, key, vars);
+  const dt = useDynamicTranslations(
+    tasks.map((task) => task.title),
+    language,
+    accessToken
+  );
 
   useEffect(() => {
     if (user?.id && accessToken) {
@@ -26,7 +33,7 @@ export function PatientView({ user, profile, accessToken }) {
   async function loadTasks() {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-fd25410b/patient/${user.id}/tasks`,
+        `${supabaseFunctionsApiBase}/patient/${user.id}/tasks`,
         {
           headers: {
             'Authorization': `Bearer ${accessToken}`
@@ -46,7 +53,7 @@ export function PatientView({ user, profile, accessToken }) {
   async function completeTask(taskId) {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-fd25410b/tasks/${taskId}/complete`,
+        `${supabaseFunctionsApiBase}/tasks/${taskId}/complete`,
         {
           method: 'POST',
           headers: {
@@ -76,7 +83,7 @@ export function PatientView({ user, profile, accessToken }) {
 
           try {
             await fetch(
-              `https://${projectId}.supabase.co/functions/v1/make-server-fd25410b/location`,
+              `${supabaseFunctionsApiBase}/location`,
               {
                 method: 'POST',
                 headers: {
@@ -100,7 +107,7 @@ export function PatientView({ user, profile, accessToken }) {
 
   async function handleVoiceNote() {
     if (!accessibilitySettings.speechToText) {
-      alert('Speech-to-text is turned off in Settings.');
+      alert(t('alertSpeechToTextOff'));
       return;
     }
 
@@ -108,15 +115,15 @@ export function PatientView({ user, profile, accessToken }) {
       setIsRecording(true);
       try {
         console.log('Starting voice recording...');
-        alert('Voice recording started!');
+        alert(t('alertVoiceRecordingStartedShort'));
         const transcript = await recordSpeechToText(language, accessToken);
         if (!transcript) {
-          alert('I could not transcribe that recording. Please try again.');
+          alert(t('alertTranscribeFailed'));
           return;
         }
 
         const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/make-server-fd25410b/voice-notes`,
+          `${supabaseFunctionsApiBase}/voice-notes`,
           {
             method: 'POST',
             headers: {
@@ -132,11 +139,11 @@ export function PatientView({ user, profile, accessToken }) {
         );
 
         if (response.ok) {
-          alert('Voice note saved and sent to caregivers.');
+          alert(t('alertVoiceNoteSavedPatient'));
         }
       } catch (error) {
         console.log('Voice note error:', error);
-        alert('Microphone or speech-to-text is not available.');
+        alert(t('alertMicrophoneUnavailable'));
       } finally {
         setIsRecording(false);
       }
@@ -148,9 +155,12 @@ export function PatientView({ user, profile, accessToken }) {
 
   async function handleHelpButton() {
     const emergencyLine = accessibilitySettings.emergencyPhone
-      ? `\n\nEmergency contact: ${accessibilitySettings.emergencyContact || 'Saved contact'} (${accessibilitySettings.emergencyPhone})`
+      ? `\n\n${t('alertEmergencyContactLine', {
+          contact: accessibilitySettings.emergencyContact || t('emergencyContact'),
+          phone: accessibilitySettings.emergencyPhone,
+        })}`
       : '';
-    alert(`Help request sent to all caregivers!\n\nYour location has been shared and the nearest caregiver will be notified to assist you.${emergencyLine}`);
+    alert(`${t('alertHelpRequestSentTitle')}\n\n${t('alertHelpRequestSentBody')}${emergencyLine}`);
     console.log('Sending help notification to caregivers');
   }
 
@@ -163,7 +173,7 @@ export function PatientView({ user, profile, accessToken }) {
       <div className="bg-gradient-to-r from-blue-600 to-cyan-600 text-white px-4 py-3 flex items-center justify-between shadow-md">
         <div className="flex items-center gap-2">
           <LayoutGrid className="w-6 h-6" />
-          <h1 className="text-xl font-bold">KampongSG</h1>
+          <h1 className="text-xl font-bold">{t('brandName')}</h1>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -188,7 +198,7 @@ export function PatientView({ user, profile, accessToken }) {
                   <span>{t('youAreHome')}</span>
                 </>
               ) : (
-                'Stay safe'
+                t('staySafe')
               )}
             </p>
           </div>
@@ -213,11 +223,11 @@ export function PatientView({ user, profile, accessToken }) {
                     <button
                       onClick={() => completeTask(task.id)}
                       className="flex-shrink-0 w-16 h-16 border-4 border-blue-600 rounded-full hover:bg-blue-50 transition-colors active:scale-95"
-                      title="Mark as done"
+                      title={t('tooltipMarkDone')}
                     />
 
                     <div className="flex-1">
-                      <h4 className="text-xl font-bold text-gray-800">{task.title}</h4>
+                      <h4 className="text-xl font-bold text-gray-800">{dt(task.title)}</h4>
                       {task.time && (
                         <p className="text-base text-gray-600 flex items-center gap-2 mt-2">
                           <Bell className="w-5 h-5" />
@@ -253,7 +263,7 @@ export function PatientView({ user, profile, accessToken }) {
                     className="bg-gray-50 rounded-2xl p-4 flex items-center gap-3 opacity-70"
                   >
                     <CheckCircle className="w-7 h-7 text-green-600" />
-                    <span className="text-lg text-gray-700 line-through">{task.title}</span>
+                    <span className="text-lg text-gray-700 line-through">{dt(task.title)}</span>
                   </div>
                 ))}
               </div>

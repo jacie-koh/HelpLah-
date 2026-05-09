@@ -17,7 +17,7 @@ export function AuthScreen({ onSignIn, onSignUp }) {
   const [loading, setLoading] = useState(false);
   const [showDemoSetup, setShowDemoSetup] = useState(false);
   const { language } = useContext(LanguageContext);
-  const t = (key) => getTranslation(language, key);
+  const t = (key: string, vars?: Record<string, string | number>) => getTranslation(language, key, vars);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -27,7 +27,7 @@ export function AuthScreen({ onSignIn, onSignUp }) {
     try {
       if (isSignUp) {
         if (role === 'primary_caregiver' && (!patientName || !patientPhone)) {
-          setError('Please provide patient information');
+          setError(t('errorProvidePatientInfo'));
           setLoading(false);
           return;
         }
@@ -36,7 +36,8 @@ export function AuthScreen({ onSignIn, onSignUp }) {
         await onSignIn(email, password);
       }
     } catch (err) {
-      setError(err.message || 'Authentication failed');
+      const message = err instanceof Error ? err.message : '';
+      setError(message?.trim() ? message : t('authErrorGeneric'));
     } finally {
       setLoading(false);
     }
@@ -49,8 +50,8 @@ export function AuthScreen({ onSignIn, onSignUp }) {
           <div className="inline-flex items-center justify-center w-20 h-20 bg-blue-600 rounded-full mb-4">
             <Heart className="w-10 h-10 text-white" />
           </div>
-          <h1 className="text-3xl font-bold text-gray-800">KampongSG</h1>
-          <p className="text-gray-600 mt-2">Community Care Together</p>
+          <h1 className="text-3xl font-bold text-gray-800">{t('brandName')}</h1>
+          <p className="text-gray-600 mt-2">{t('brandTagline')}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -67,7 +68,7 @@ export function AuthScreen({ onSignIn, onSignUp }) {
                   onChange={(e) => setName(e.target.value)}
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                   required
-                  placeholder="Your name"
+                  placeholder={t('placeholderYourName')}
                 />
               </div>
 
@@ -165,7 +166,7 @@ export function AuthScreen({ onSignIn, onSignUp }) {
                           onChange={(e) => setPatientName(e.target.value)}
                           className="w-full px-4 py-3 border border-blue-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                           required
-                          placeholder="Patient's full name"
+                          placeholder={t('patientName')}
                         />
                       </div>
                       <div>

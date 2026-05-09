@@ -1,6 +1,7 @@
-import { projectId } from '../../../utils/supabase/info.tsx';
+import { publicAnonKey } from '../../../utils/supabase/info.tsx';
+import { supabaseFunctionsApiBase } from '../../../utils/supabase/api';
 
-const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-fd25410b`;
+const API_BASE = supabaseFunctionsApiBase;
 
 const speechLanguageMap = {
   'en-sg': 'en-SG',
@@ -38,7 +39,8 @@ export async function speakText(text: string, language: string, accessToken?: st
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`
+          'Authorization': `Bearer ${accessToken}`,
+          apikey: publicAnonKey
         },
         body: JSON.stringify({ text, language })
       });
@@ -73,7 +75,8 @@ export async function transcribeAudioBlob(blob: Blob, language: string, accessTo
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${accessToken}`
+      'Authorization': `Bearer ${accessToken}`,
+      apikey: publicAnonKey
     },
     body: JSON.stringify({
       audioBase64,

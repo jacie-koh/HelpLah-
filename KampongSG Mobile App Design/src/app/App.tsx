@@ -1,13 +1,15 @@
-import { useState, useEffect, createContext } from 'react';
+import { useState, useEffect, useMemo, createContext } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { supabase } from '../../utils/supabase/client';
-import { projectId, publicAnonKey } from '../../utils/supabase/info.tsx';
+import { publicAnonKey } from '../../utils/supabase/info.tsx';
+import { supabaseFunctionsApiBase } from '../../utils/supabase/api';
 import { AuthScreen } from './components/AuthScreen';
 import { PatientView } from './components/PatientView';
 import { PrimaryCaregiverView } from './components/PrimaryCaregiverView';
 import { CommunityCaregiverView } from './components/CommunityCaregiverView';
 import { SettingsScreen } from './components/SettingsScreen';
 import { AssessmentScreen } from './components/AssessmentScreen';
+import { getTranslation } from './utils/translations';
 
 const defaultAccessibilitySettings = {
   notifications: true,
@@ -66,8 +68,8 @@ export default function App() {
         'Authorization': `Bearer ${token}`
       };
       const [profileResponse, settingsResponse] = await Promise.all([
-        fetch(`https://${projectId}.supabase.co/functions/v1/make-server-fd25410b/profile`, { headers }),
-        fetch(`https://${projectId}.supabase.co/functions/v1/make-server-fd25410b/settings`, { headers })
+        fetch(`${supabaseFunctionsApiBase}/profile`, { headers }),
+        fetch(`${supabaseFunctionsApiBase}/settings`, { headers })
       ]);
 
       if (profileResponse.ok) {
@@ -109,7 +111,7 @@ export default function App() {
   async function handleSignUp(email, password, name, role, phoneNumber, patientName, patientPhone) {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-fd25410b/signup`,
+        `${supabaseFunctionsApiBase}/signup`,
         {
           method: 'POST',
           headers: {
@@ -139,24 +141,31 @@ export default function App() {
     setAccessToken(null);
   }
 
+  const languageContextValue = useMemo(
+    () => ({ language, setLanguage, accessibilitySettings, setAccessibilitySettings }),
+    [language, accessibilitySettings],
+  );
+
   if (loading) {
     return (
-      <div className="size-full flex items-center justify-center bg-gradient-to-b from-blue-50 to-blue-100">
-        <div className="text-2xl font-semibold text-blue-600">Loading...</div>
-      </div>
+      <LanguageContext.Provider value={languageContextValue}>
+        <div className="size-full flex items-center justify-center bg-gradient-to-b from-blue-50 to-blue-100">
+          <div className="text-2xl font-semibold text-blue-600">{getTranslation(language, 'loading')}</div>
+        </div>
+      </LanguageContext.Provider>
     );
   }
 
   if (!user || !profile) {
     return (
-      <LanguageContext.Provider value={{ language, setLanguage, accessibilitySettings, setAccessibilitySettings }}>
+      <LanguageContext.Provider value={languageContextValue}>
         <AuthScreen onSignIn={handleSignIn} onSignUp={handleSignUp} />
       </LanguageContext.Provider>
     );
   }
 
   return (
-    <LanguageContext.Provider value={{ language, setLanguage, accessibilitySettings, setAccessibilitySettings }}>
+    <LanguageContext.Provider value={languageContextValue}>
       <BrowserRouter>
         <Routes>
           {profile.role === 'patient' && (
@@ -169,7 +178,7 @@ export default function App() {
           {profile.role === 'primary_caregiver' && (
             <>
               <Route path="/" element={<PrimaryCaregiverView user={user} profile={profile} accessToken={accessToken} />} />
-              <Route path="/assessment" element={<AssessmentScreen user={user} profile={profile} accessToken={accessToken} patientId={user.id} />} />
+              <Route path="/assessment" element={<AssessmentScreen user={user} accessToken={accessToken} patientId={user.id} />} />
               <Route path="/settings" element={<SettingsScreen user={user} profile={profile} accessToken={accessToken} onSignOut={handleSignOut} />} />
             </>
           )}

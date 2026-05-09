@@ -1,0 +1,8 @@
+cf-sealion/
+
+# Local dependency installs
+node_modules/
+KampongSG Mobile App Design/cloudflare/sea-lion-worker/node_modules/
+
+# Local Supabase CLI state
+KampongSG Mobile App Design/supabase/.temp/

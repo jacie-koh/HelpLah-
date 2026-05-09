@@ -1,8 +1,9 @@
 import { useContext, useState } from 'react';
 import { X, Plus, Video, Image, Mic } from 'lucide-react';
-import { projectId } from '../../../utils/supabase/info.tsx';
+import { supabaseFunctionsApiBase } from '../../../utils/supabase/api';
 import { LanguageContext } from '../App';
 import { getTranslation } from '../utils/translations';
+import { useDynamicTranslations } from '../utils/dynamicTranslations';
 import { recordSpeechToText } from '../utils/voice';
 
 const TASK_TEMPLATES = [
@@ -25,7 +26,17 @@ export function TaskManager({ patientId, accessToken, onClose, onTasksCreated })
   const [creating, setCreating] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const { language, accessibilitySettings } = useContext(LanguageContext);
-  const t = (key) => getTranslation(language, key);
+  const t = (key: string, vars?: Record<string, string | number>) =>
+    getTranslation(language, key, vars);
+  const dt = useDynamicTranslations(
+    [
+      ...TASK_TEMPLATES.map((task) => task.title),
+      ...selectedTasks.map((task) => task.title),
+      customTitle
+    ],
+    language,
+    accessToken
+  );
 
   function toggleTask(task) {
     if (selectedTasks.find(t => t.title === task.title)) {
@@ -37,23 +48,23 @@ export function TaskManager({ patientId, accessToken, onClose, onTasksCreated })
 
   async function handleVoiceInput() {
     if (!accessibilitySettings.speechToText) {
-      alert('Speech-to-text is turned off in Settings.');
+      alert(t('alertSpeechToTextOff'));
       return;
     }
 
     if (!isRecording) {
       setIsRecording(true);
-      alert('Voice recording started.');
+      alert(t('alertVoiceRecordingStarted'));
       try {
         const transcript = await recordSpeechToText(language, accessToken);
         if (transcript) {
           setCustomTitle(transcript);
         } else {
-          alert('I could not transcribe that recording. Please try again.');
+          alert(t('alertTranscribeFailed'));
         }
       } catch (error) {
         console.log('Voice input error:', error);
-        alert('Microphone or speech-to-text is not available.');
+        alert(t('alertMicrophoneUnavailable'));
       } finally {
         setIsRecording(false);
       }
@@ -86,7 +97,7 @@ export function TaskManager({ patientId, accessToken, onClose, onTasksCreated })
     try {
       for (const task of selectedTasks) {
         await fetch(
-          `https://${projectId}.supabase.co/functions/v1/make-server-fd25410b/tasks`,
+          `${supabaseFunctionsApiBase}/tasks`,
           {
             method: 'POST',
             headers: {
@@ -112,7 +123,7 @@ export function TaskManager({ patientId, accessToken, onClose, onTasksCreated })
       onClose();
     } catch (error) {
       console.log('Error creating tasks:', error);
-      alert('Failed to create tasks');
+      alert(t('alertFailedCreateTasks'));
     } finally {
       setCreating(false);
     }
@@ -150,7 +161,7 @@ export function TaskManager({ patientId, accessToken, onClose, onTasksCreated })
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
-                      <p className="font-medium text-gray-800 text-sm">{task.title}</p>
+                      <p className="font-medium text-gray-800 text-sm">{dt(task.title)}</p>
                       {task.time && (
                         <p className="text-xs text-gray-600 mt-1">{task.time}</p>
                       )}
@@ -187,7 +198,7 @@ export function TaskManager({ patientId, accessToken, onClose, onTasksCreated })
                   className={`absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-lg transition-colors ${
                     isRecording ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                   } disabled:opacity-40 disabled:cursor-not-allowed`}
-                  title="Voice input"
+                  title={t('tooltipVoiceInput')}
                 >
                   <Mic className={`w-5 h-5 ${isRecording ? 'animate-pulse' : ''}`} />
                 </button>
@@ -231,7 +242,7 @@ export function TaskManager({ patientId, accessToken, onClose, onTasksCreated })
               <div className="space-y-1">
                 {selectedTasks.map((task, idx) => (
                   <div key={idx} className="text-sm text-blue-800 flex items-center gap-2">
-                    <span>• {task.title} {task.time && `(${task.time})`}</span>
+                    <span>• {dt(task.title)} {task.time && `(${task.time})`}</span>
                     <div className="flex gap-1">
                       {task.videoUrl && <Video className="w-3 h-3" />}
                       {task.imageUrl && <Image className="w-3 h-3" />}

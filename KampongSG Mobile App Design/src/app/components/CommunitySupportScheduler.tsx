@@ -1,8 +1,19 @@
 import { useContext, useState } from 'react';
 import { X, Plus, Users, Calendar, Clock } from 'lucide-react';
-import { projectId } from '../../../utils/supabase/info.tsx';
+import { supabaseFunctionsApiBase } from '../../../utils/supabase/api';
 import { LanguageContext } from '../App';
 import { getTranslation } from '../utils/translations';
+import { useDynamicTranslations } from '../utils/dynamicTranslations';
+
+const DURATION_OPTIONS = [
+  { value: '1', label: '1 hour' },
+  { value: '2', label: '2 hours' },
+  { value: '3', label: '3 hours' },
+  { value: '4', label: '4 hours' },
+  { value: '5', label: '5 hours' },
+  { value: '6', label: '6 hours' },
+  { value: '8', label: '8 hours (full day)' }
+];
 
 export function CommunitySupportScheduler({ userId, accessToken, onClose, onSessionCreated }) {
   const [date, setDate] = useState('');
@@ -11,18 +22,24 @@ export function CommunitySupportScheduler({ userId, accessToken, onClose, onSess
   const [tasks, setTasks] = useState('');
   const [creating, setCreating] = useState(false);
   const { language } = useContext(LanguageContext);
-  const t = (key) => getTranslation(language, key);
+  const t = (key: string, vars?: Record<string, string | number>) =>
+    getTranslation(language, key, vars);
+  const dt = useDynamicTranslations(
+    [...DURATION_OPTIONS.map((option) => option.label), tasks],
+    language,
+    accessToken
+  );
 
   async function handleSchedule() {
     if (!date || !time) {
-      alert('Please fill in date and time');
+      alert(t('alertFillDateTime'));
       return;
     }
 
     setCreating(true);
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-fd25410b/community-support`,
+        `${supabaseFunctionsApiBase}/community-support`,
         {
           method: 'POST',
           headers: {
@@ -33,7 +50,7 @@ export function CommunitySupportScheduler({ userId, accessToken, onClose, onSess
             userId,
             date,
             time,
-            duration: `${duration} hours`,
+            duration: DURATION_OPTIONS.find((option) => option.value === duration)?.label || `${duration} hours`,
             tasks,
             status: 'pending', // Waiting for a community caregiver to accept
             caregiverName: null // Not assigned yet
@@ -47,11 +64,11 @@ export function CommunitySupportScheduler({ userId, accessToken, onClose, onSess
         }
         onClose();
       } else {
-        alert('Failed to create community support request');
+        alert(t('alertFailedCommunitySupport'));
       }
     } catch (error) {
       console.log('Error creating community support request:', error);
-      alert('Failed to create community support request');
+      alert(t('alertFailedCommunitySupport'));
     } finally {
       setCreating(false);
     }
@@ -119,13 +136,11 @@ export function CommunitySupportScheduler({ userId, accessToken, onClose, onSess
                 onChange={(e) => setDuration(e.target.value)}
                 className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
               >
-                <option value="1">1 hour</option>
-                <option value="2">2 hours</option>
-                <option value="3">3 hours</option>
-                <option value="4">4 hours</option>
-                <option value="5">5 hours</option>
-                <option value="6">6 hours</option>
-                <option value="8">8 hours (full day)</option>
+                {DURATION_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {dt(option.label)}
+                  </option>
+                ))}
               </select>
             </div>
 
