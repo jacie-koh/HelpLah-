@@ -29,6 +29,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
   const [isRecordingNote, setIsRecordingNote] = useState(false);
   const navigate = useNavigate();
   const { language } = useContext(LanguageContext);
+  const t = (key) => getTranslation(language, key);
 
   useEffect(() => {
     if (user?.id && accessToken) {
@@ -253,7 +254,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
         {activeView === 'home' && (
           <div className="p-4">
             {/* Welcome Message */}
-            <h2 className="text-2xl font-bold text-gray-800 mb-6">Hi {profile.name}, welcome back!</h2>
+            <h2 className="text-2xl font-bold text-gray-800 mb-6">{t('welcome')} {profile.name}, {t('welcomeBack')}</h2>
 
             {/* Quick Access Cards */}
             <div className="grid grid-cols-3 gap-3 mb-6">
@@ -262,7 +263,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                 className="bg-white border-2 border-gray-200 rounded-2xl p-6 flex flex-col items-center gap-3 hover:border-purple-400 hover:shadow-lg transition-all active:scale-95"
               >
                 <Users className="w-12 h-12 text-purple-600" />
-                <span className="text-sm font-semibold text-gray-800 text-center">Community Support</span>
+                <span className="text-sm font-semibold text-gray-800 text-center">{t('communitySupport')}</span>
               </button>
 
               <button
@@ -270,7 +271,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                 className="bg-white border-2 border-gray-200 rounded-2xl p-6 flex flex-col items-center gap-3 hover:border-blue-400 hover:shadow-lg transition-all active:scale-95"
               >
                 <Activity className="w-12 h-12 text-blue-600" />
-                <span className="text-sm font-semibold text-gray-800 text-center">Vitals</span>
+                <span className="text-sm font-semibold text-gray-800 text-center">{t('vitals')}</span>
               </button>
 
               <button
@@ -279,14 +280,14 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                 style={{ borderColor: '#4A9EFF' }}
               >
                 <MessageSquare className="w-12 h-12" style={{ color: '#4A9EFF' }} />
-                <span className="text-sm font-semibold text-gray-800 text-center">Patient's Notes</span>
+                <span className="text-sm font-semibold text-gray-800 text-center">{t('patientNotes')}</span>
               </button>
             </div>
 
             {/* My Tasks Section */}
             <div className="bg-white rounded-2xl border-2 overflow-hidden mb-4" style={{ borderColor: '#4A9EFF' }}>
               <div className="px-4 py-3 flex items-center justify-between border-b-2" style={{ backgroundColor: '#E1F0FF', borderColor: '#4A9EFF' }}>
-                <h3 className="text-lg font-bold text-gray-800">My Tasks</h3>
+                <h3 className="text-lg font-bold text-gray-800">{t('myTasks')}</h3>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={handleRefresh}
@@ -312,7 +313,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
 
               {myTasks.length === 0 ? (
                 <div className="p-8 text-center">
-                  <p className="text-gray-500 mb-4">No tasks for yourself yet</p>
+                  <p className="text-gray-500 mb-4">{t('noTasks')}</p>
                   <button
                     onClick={() => setShowMyTaskManager(true)}
                     className="px-6 py-3 text-white rounded-xl font-semibold transition-colors inline-flex items-center gap-2"
@@ -321,7 +322,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                     onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#4A9EFF'}
                   >
                     <Plus className="w-5 h-5" />
-                    Add Your First Task
+                    {t('addFirstTask')}
                   </button>
                 </div>
               ) : (
@@ -377,7 +378,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
             {/* Patient's Tasks Section */}
             <div className="bg-white rounded-2xl border-2 border-blue-300 overflow-hidden mb-4">
               <div className="bg-blue-50 px-4 py-3 flex items-center justify-between border-b-2 border-blue-200">
-                <h3 className="text-lg font-bold text-gray-800">Patient's Tasks</h3>
+                <h3 className="text-lg font-bold text-gray-800">{t('patientTasks')}</h3>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={handleRefresh}
@@ -398,7 +399,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
 
               {tasks.length === 0 ? (
                 <div className="p-8 text-center">
-                  <p className="text-gray-500 mb-4">No tasks scheduled yet</p>
+                  <p className="text-gray-500 mb-4">{t('noTasksScheduled')}</p>
                   <button
                     onClick={() => setShowTaskManager(true)}
                     className="px-6 py-3 text-white rounded-xl font-semibold transition-colors inline-flex items-center gap-2"
@@ -407,7 +408,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                     onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#4A9EFF'}
                   >
                     <Plus className="w-5 h-5" />
-                    Add Your First Task
+                    {t('addFirstTask')}
                   </button>
                 </div>
               ) : (
@@ -465,7 +466,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
               <div className="bg-purple-50 px-4 py-3 flex items-center justify-between border-b-2 border-purple-200">
                 <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
                   <Calendar className="w-5 h-5 text-purple-600" />
-                  Scheduled Community Support
+                  {t('scheduledSupport')}
                 </h3>
                 <button
                   onClick={() => setShowCommunitySupportScheduler(true)}
@@ -478,13 +479,13 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
 
               {communitySupport.length === 0 ? (
                 <div className="p-8 text-center">
-                  <p className="text-gray-500 mb-4">No community support scheduled</p>
+                  <p className="text-gray-500 mb-4">{t('noCommunitySupport')}</p>
                   <button
                     onClick={() => setShowCommunitySupportScheduler(true)}
                     className="px-6 py-3 bg-purple-600 text-white rounded-xl font-semibold hover:bg-purple-700 transition-colors inline-flex items-center gap-2"
                   >
                     <Plus className="w-5 h-5" />
-                    Schedule Community Support
+                    {t('scheduleCommunitySupport')}
                   </button>
                 </div>
               ) : (
@@ -508,7 +509,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                             ) : (
                               <>
                                 <Users className="w-5 h-5 text-gray-400" />
-                                <span className="text-base font-semibold text-gray-600">Waiting for community caregiver...</span>
+                                <span className="text-base font-semibold text-gray-600">{t('waitingCaregiver')}</span>
                                 <span className="text-xs px-2 py-1 rounded-full font-semibold bg-orange-100 text-orange-700">
                                   Pending
                                 </span>
@@ -542,11 +543,11 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
               className="mb-4 font-semibold flex items-center gap-2"
               style={{ color: '#4A9EFF' }}
             >
-              ← Back to Home
+              ← {t('backToHome')}
             </button>
-            <h2 className="text-2xl font-bold text-gray-800 mb-4">Notifications</h2>
+            <h2 className="text-2xl font-bold text-gray-800 mb-4">{t('notifications')}</h2>
             {notifications.length === 0 ? (
-              <p className="text-gray-500 text-center py-8">No notifications</p>
+              <p className="text-gray-500 text-center py-8">{t('noNotifications')}</p>
             ) : (
               <div className="space-y-3">
                 {notifications.map((notification) => (
@@ -570,7 +571,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                             className="mt-3 px-4 py-2 bg-red-600 text-white rounded-xl font-semibold hover:bg-red-700 transition-colors flex items-center gap-2"
                           >
                             <MapPin className="w-4 h-4" />
-                            Check Location
+                            {t('checkLocation')}
                           </button>
                         )}
                         <p className="text-xs text-gray-600 mt-2">{notification.time}</p>
@@ -599,9 +600,9 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                   className="mb-4 font-semibold flex items-center gap-2"
                   style={{ color: '#4A9EFF' }}
                 >
-                  ← Back to Home
+                  ← {t('backToHome')}
                 </button>
-                <h2 className="text-2xl font-bold text-gray-800 mb-4">Community Support</h2>
+                <h2 className="text-2xl font-bold text-gray-800 mb-4">{t('communitySupport')}</h2>
                 <p className="text-gray-600 mb-6">Request immediate help from nearby community caregivers</p>
                 
                 {/* Grab-style Map Placeholder */}
@@ -626,7 +627,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                   className="w-full bg-gradient-to-r from-purple-600 to-purple-700 text-white py-5 rounded-3xl font-bold text-xl hover:from-purple-700 hover:to-purple-800 transition-all active:scale-95 shadow-xl flex items-center justify-center gap-3"
                 >
                   <Users className="w-8 h-8" />
-                  Request Help Now
+                  {t('requestHelpNow')}
                 </button>
 
                 <p className="text-xs text-gray-500 text-center mt-4">
@@ -680,13 +681,13 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                         <div className="absolute inset-0 border-4 border-purple-200 rounded-full"></div>
                         <div className="absolute inset-0 border-4 border-purple-600 rounded-full animate-spin" style={{ borderTopColor: 'transparent' }}></div>
                       </div>
-                      <h3 className="text-xl font-bold text-gray-800 mb-2">Finding nearby caregivers...</h3>
+                      <h3 className="text-xl font-bold text-gray-800 mb-2">{t('findingCaregivers')}</h3>
                       <p className="text-gray-600 mb-6">Please wait while we match you with an available community caregiver</p>
                       <button
                         onClick={handleCancelRequest}
                         className="w-full bg-gray-100 text-gray-700 py-4 rounded-2xl font-semibold hover:bg-gray-200 transition-colors"
                       >
-                        Cancel Request
+                        {t('cancelRequest')}
                       </button>
                     </div>
                   ) : (
@@ -721,13 +722,13 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                           className="bg-gray-100 text-gray-700 py-4 rounded-2xl font-semibold hover:bg-gray-200 transition-colors flex items-center justify-center gap-2"
                         >
                           <Phone className="w-5 h-5" />
-                          Call
+                          {t('call')}
                         </button>
                         <button
                           onClick={handleCancelRequest}
                           className="bg-red-50 text-red-600 py-4 rounded-2xl font-semibold hover:bg-red-100 transition-colors"
                         >
-                          Cancel
+                          {t('cancel')}
                         </button>
                       </div>
                     </div>
@@ -745,13 +746,13 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
               className="mb-4 font-semibold flex items-center gap-2"
               style={{ color: '#4A9EFF' }}
             >
-              ← Back to Home
+              ← {t('backToHome')}
             </button>
-            <h2 className="text-2xl font-bold text-gray-800 mb-4">Vitals</h2>
+            <h2 className="text-2xl font-bold text-gray-800 mb-4">{t('vitals')}</h2>
             {vitals.length === 0 ? (
               <div className="bg-blue-50 border-2 border-blue-200 rounded-2xl p-8 text-center">
                 <Activity className="w-16 h-16 text-blue-600 mx-auto mb-4" />
-                <p className="text-gray-700">No vitals recorded yet</p>
+                <p className="text-gray-700">{t('noNotes')}</p>
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-4">
@@ -778,13 +779,13 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
               className="mb-4 font-semibold flex items-center gap-2"
               style={{ color: '#4A9EFF' }}
             >
-              ← Back to Home
+              ← {t('backToHome')}
             </button>
-            <h2 className="text-2xl font-bold text-gray-800 mb-4">Patient's Notes</h2>
+            <h2 className="text-2xl font-bold text-gray-800 mb-4">{t('patientNotes')}</h2>
             {voiceNotes.length === 0 ? (
               <div className="border-2 rounded-2xl p-8 text-center" style={{ backgroundColor: '#E1F0FF', borderColor: '#4A9EFF' }}>
                 <MessageSquare className="w-16 h-16 mx-auto mb-4" style={{ color: '#4A9EFF' }} />
-                <p className="text-gray-700">No notes recorded yet</p>
+                <p className="text-gray-700">{t('noNotes')}</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -808,9 +809,9 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
               className="mb-4 font-semibold flex items-center gap-2"
               style={{ color: '#4A9EFF' }}
             >
-              ← Back to Home
+              ← {t('backToHome')}
             </button>
-            <h2 className="text-2xl font-bold text-gray-800 mb-6">Resources & Support</h2>
+            <h2 className="text-2xl font-bold text-gray-800 mb-6">{t('resourcesSupport')}</h2>
             
             {/* Resource Cards Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -820,7 +821,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                 className="bg-white border-2 border-gray-200 rounded-2xl p-6 flex flex-col items-center gap-3 hover:border-blue-400 hover:shadow-lg transition-all active:scale-95"
               >
                 <Phone className="w-16 h-16 text-blue-600" />
-                <span className="text-base font-semibold text-gray-800 text-center">Contact Us</span>
+                <span className="text-base font-semibold text-gray-800 text-center">{t('contactUs')}</span>
               </button>
 
               {/* Support */}
@@ -829,7 +830,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                 className="bg-white border-2 border-gray-200 rounded-2xl p-6 flex flex-col items-center gap-3 hover:border-purple-400 hover:shadow-lg transition-all active:scale-95"
               >
                 <Heart className="w-16 h-16 text-purple-600" />
-                <span className="text-base font-semibold text-gray-800 text-center">Support</span>
+                <span className="text-base font-semibold text-gray-800 text-center">{t('support')}</span>
               </button>
 
               {/* Survey */}
@@ -839,7 +840,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                 style={{ borderColor: '#4A9EFF' }}
               >
                 <ClipboardList className="w-16 h-16" style={{ color: '#4A9EFF' }} />
-                <span className="text-base font-semibold text-gray-800 text-center">Survey</span>
+                <span className="text-base font-semibold text-gray-800 text-center">{t('survey')}</span>
               </button>
             </div>
           </div>
@@ -852,9 +853,9 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
               className="mb-4 font-semibold flex items-center gap-2"
               style={{ color: '#4A9EFF' }}
             >
-              ← Back to Home
+              ← {t('backToHome')}
             </button>
-            <h2 className="text-2xl font-bold text-gray-800 mb-6">How to Use KampongSG</h2>
+            <h2 className="text-2xl font-bold text-gray-800 mb-6">{t('help')}</h2>
 
             <div className="space-y-4">
               {/* Quick Actions */}
@@ -901,7 +902,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                 <div className="flex items-start gap-3">
                   <Users className="w-8 h-8 flex-shrink-0 text-purple-600" />
                   <div>
-                    <h3 className="text-lg font-bold text-gray-800 mb-2">Request Immediate Help</h3>
+                    <h3 className="text-lg font-bold text-gray-800 mb-2">{t('requestHelpNow')}</h3>
                     <p className="text-gray-700 text-sm mb-2">Tap "Community Support" for urgent help within 6-12 hours:</p>
                     <ul className="text-gray-700 text-sm space-y-1 ml-4">
                       <li>• See nearby caregivers on map</li>
@@ -917,7 +918,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                 <div className="flex items-start gap-3">
                   <Calendar className="w-8 h-8 flex-shrink-0 text-purple-600" />
                   <div>
-                    <h3 className="text-lg font-bold text-gray-800 mb-2">Schedule Future Support</h3>
+                    <h3 className="text-lg font-bold text-gray-800 mb-2">{t('scheduledSupport')}</h3>
                     <p className="text-gray-700 text-sm">For planned help beyond 12 hours, use "Scheduled Community Support" on the home screen to book caregivers in advance.</p>
                   </div>
                 </div>
@@ -928,7 +929,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                 <div className="flex items-start gap-3">
                   <Activity className="w-8 h-8 flex-shrink-0 text-blue-600" />
                   <div>
-                    <h3 className="text-lg font-bold text-gray-800 mb-2">Track Patient Vitals</h3>
+                    <h3 className="text-lg font-bold text-gray-800 mb-2">{t('vitals')}</h3>
                     <p className="text-gray-700 text-sm">Monitor blood pressure, heart rate, and other health metrics. Data is shared with medical professionals.</p>
                   </div>
                 </div>
@@ -939,7 +940,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                 <div className="flex items-start gap-3">
                   <Bell className="w-8 h-8 flex-shrink-0 text-red-600" />
                   <div>
-                    <h3 className="text-lg font-bold text-gray-800 mb-2">Stay Informed</h3>
+                    <h3 className="text-lg font-bold text-gray-800 mb-2">{t('notifications')}</h3>
                     <p className="text-gray-700 text-sm">Receive alerts when your patient leaves home, misses medication, or needs assistance. Tap <X className="w-4 h-4 inline" /> to dismiss notifications.</p>
                   </div>
                 </div>
@@ -950,7 +951,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                 <div className="flex items-start gap-3">
                   <Settings className="w-8 h-8 flex-shrink-0 text-gray-600" />
                   <div>
-                    <h3 className="text-lg font-bold text-gray-800 mb-2">Customize Your Experience</h3>
+                    <h3 className="text-lg font-bold text-gray-800 mb-2">{t('settings')}</h3>
                     <p className="text-gray-700 text-sm mb-2">Tap <Settings className="w-4 h-4 inline" /> in the top right to:</p>
                     <ul className="text-gray-700 text-sm space-y-1 ml-4">
                       <li>• Change language preference</li>
@@ -965,14 +966,14 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
 
             {/* Need More Help */}
             <div className="mt-6 bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-gray-200 rounded-2xl p-6 text-center">
-              <h3 className="text-lg font-bold text-gray-800 mb-3">Need More Help?</h3>
+              <h3 className="text-lg font-bold text-gray-800 mb-3">{t('needMoreHelp')}</h3>
               <p className="text-gray-700 text-sm mb-4">Our support team is here 24/7</p>
               <button
                 onClick={() => setActiveView('resources')}
                 className="px-6 py-3 text-white rounded-xl font-semibold transition-all hover:shadow-lg"
                 style={{ backgroundColor: '#4A9EFF' }}
               >
-                Contact Support
+                {t('contactSupport')}
               </button>
             </div>
           </div>
@@ -989,7 +990,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
           style={activeView === 'home' ? { color: '#4A9EFF' } : {}}
         >
           <Home className="w-6 h-6" />
-          <span className="text-xs font-semibold">Home</span>
+          <span className="text-xs font-semibold">{t('home')}</span>
         </button>
         <button
           onClick={() => setActiveView('resources')}
@@ -999,7 +1000,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
           style={activeView === 'resources' ? { color: '#4A9EFF' } : {}}
         >
           <LayoutGrid className="w-6 h-6" />
-          <span className="text-xs font-semibold">Resources</span>
+          <span className="text-xs font-semibold">{t('resources')}</span>
         </button>
         <button
           onClick={() => setActiveView('help')}
@@ -1009,7 +1010,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
           style={activeView === 'help' ? { color: '#4A9EFF' } : {}}
         >
           <HelpCircle className="w-6 h-6" />
-          <span className="text-xs font-semibold">Help</span>
+          <span className="text-xs font-semibold">{t('help')}</span>
         </button>
       </div>
 
@@ -1076,7 +1077,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                 <Home className="w-8 h-8 text-white" />
               </div>
               <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 whitespace-nowrap bg-white px-3 py-1 rounded-full shadow-md text-xs font-semibold">
-                Home
+                {t('home')}
               </div>
             </div>
 
@@ -1123,14 +1124,14 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                 style={{ backgroundColor: '#4A9EFF' }}
               >
                 <Phone className="w-5 h-5" />
-                Call Patient
+                {t('callPatient')}
               </button>
               <button
                 onClick={() => alert('🚗 Opening navigation to ' + patientLocation.name)}
                 className="bg-purple-600 text-white py-4 rounded-2xl font-semibold hover:bg-purple-700 transition-colors flex items-center justify-center gap-2"
               >
                 <MapPin className="w-5 h-5" />
-                Navigate
+                {t('navigate')}
               </button>
             </div>
           </div>

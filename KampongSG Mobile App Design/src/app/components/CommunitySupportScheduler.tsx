@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useContext, useState } from 'react';
 import { X, Plus, Users, Calendar, Clock } from 'lucide-react';
 import { projectId } from '../../../utils/supabase/info.tsx';
+import { LanguageContext } from '../App';
+import { getTranslation } from '../utils/translations';
 
 export function CommunitySupportScheduler({ userId, accessToken, onClose, onSessionCreated }) {
   const [date, setDate] = useState('');
@@ -8,6 +10,8 @@ export function CommunitySupportScheduler({ userId, accessToken, onClose, onSess
   const [duration, setDuration] = useState('2');
   const [tasks, setTasks] = useState('');
   const [creating, setCreating] = useState(false);
+  const { language } = useContext(LanguageContext);
+  const t = (key) => getTranslation(language, key);
 
   async function handleSchedule() {
     if (!date || !time) {
@@ -60,7 +64,7 @@ export function CommunitySupportScheduler({ userId, accessToken, onClose, onSess
         <div className="flex items-center justify-between p-6 border-b border-gray-200" style={{ backgroundColor: '#E8F2FF' }}>
           <div className="flex items-center gap-3">
             <Users className="w-6 h-6 text-purple-600" />
-            <h2 className="text-2xl font-bold text-gray-800">Request Community Support</h2>
+            <h2 className="text-2xl font-bold text-gray-800">{t('requestCommunitySupport')}</h2>
           </div>
           <button
             onClick={onClose}
@@ -81,7 +85,7 @@ export function CommunitySupportScheduler({ userId, accessToken, onClose, onSess
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
                 <Calendar className="w-4 h-4" />
-                Date Needed
+                {t('dateNeeded')}
               </label>
               <input
                 type="date"
@@ -95,7 +99,7 @@ export function CommunitySupportScheduler({ userId, accessToken, onClose, onSess
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
                 <Clock className="w-4 h-4" />
-                Start Time
+                {t('startTime')}
               </label>
               <input
                 type="time"
@@ -108,7 +112,7 @@ export function CommunitySupportScheduler({ userId, accessToken, onClose, onSess
             {/* Duration */}
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Duration Needed
+                {t('durationNeeded')}
               </label>
               <select
                 value={duration}
@@ -128,7 +132,7 @@ export function CommunitySupportScheduler({ userId, accessToken, onClose, onSess
             {/* Tasks/Notes */}
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Tasks & Instructions
+                {t('tasksInstructions')}
               </label>
               <textarea
                 value={tasks}
@@ -148,7 +152,7 @@ export function CommunitySupportScheduler({ userId, accessToken, onClose, onSess
             disabled={!date || !time || creating}
             className="w-full bg-purple-600 text-white py-4 rounded-xl font-semibold hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {creating ? 'Creating Request...' : 'Request Community Support'}
+            {creating ? t('creatingRequest') : t('requestCommunitySupport')}
           </button>
         </div>
       </div>

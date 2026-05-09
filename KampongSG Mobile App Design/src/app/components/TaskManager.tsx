@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useContext, useState } from 'react';
 import { X, Plus, Video, Image, Mic } from 'lucide-react';
 import { projectId } from '../../../utils/supabase/info.tsx';
+import { LanguageContext } from '../App';
+import { getTranslation } from '../utils/translations';
 
 const TASK_TEMPLATES = [
   { title: 'Take Morning Medication', time: '08:00', videoUrl: 'https://www.youtube.com/watch?v=medication-demo', imageUrl: null },
@@ -21,6 +23,8 @@ export function TaskManager({ patientId, accessToken, onClose, onTasksCreated })
   const [customImageUrl, setCustomImageUrl] = useState('');
   const [creating, setCreating] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const { language } = useContext(LanguageContext);
+  const t = (key) => getTranslation(language, key);
 
   function toggleTask(task) {
     if (selectedTasks.find(t => t.title === task.title)) {
@@ -105,7 +109,7 @@ export function TaskManager({ patientId, accessToken, onClose, onTasksCreated })
       <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <h2 className="text-2xl font-bold text-gray-800">Add Tasks</h2>
+          <h2 className="text-2xl font-bold text-gray-800">{t('addTasks')}</h2>
           <button
             onClick={onClose}
             className="p-2 hover:bg-gray-100 rounded-full transition-colors"
@@ -118,7 +122,7 @@ export function TaskManager({ patientId, accessToken, onClose, onTasksCreated })
         <div className="flex-1 overflow-auto p-6">
           {/* Templates */}
           <div className="mb-6">
-            <h3 className="text-lg font-semibold text-gray-800 mb-3">Quick Templates</h3>
+            <h3 className="text-lg font-semibold text-gray-800 mb-3">{t('quickTemplates')}</h3>
             <div className="grid grid-cols-2 gap-3">
               {TASK_TEMPLATES.map((task, idx) => (
                 <button
@@ -153,14 +157,14 @@ export function TaskManager({ patientId, accessToken, onClose, onTasksCreated })
 
           {/* Custom Task */}
           <div className="border-t border-gray-200 pt-6">
-            <h3 className="text-lg font-semibold text-gray-800 mb-3">Add Custom Task</h3>
+            <h3 className="text-lg font-semibold text-gray-800 mb-3">{t('addCustomTask')}</h3>
             <div className="space-y-3">
               <div className="relative">
                 <input
                   type="text"
                   value={customTitle}
                   onChange={(e) => setCustomTitle(e.target.value)}
-                  placeholder="Task name (e.g., Exercise)"
+                  placeholder={t('taskNamePlaceholder')}
                   className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
                 <button
@@ -183,14 +187,14 @@ export function TaskManager({ patientId, accessToken, onClose, onTasksCreated })
                 type="url"
                 value={customVideoUrl}
                 onChange={(e) => setCustomVideoUrl(e.target.value)}
-                placeholder="Video URL (optional)"
+                placeholder={t('videoUrl')}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
               <input
                 type="url"
                 value={customImageUrl}
                 onChange={(e) => setCustomImageUrl(e.target.value)}
-                placeholder="Image URL (optional)"
+                placeholder={t('imageUrl')}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
               <button
@@ -198,7 +202,7 @@ export function TaskManager({ patientId, accessToken, onClose, onTasksCreated })
                 className="w-full bg-gray-100 text-gray-700 py-3 rounded-xl font-medium hover:bg-gray-200 transition-colors flex items-center justify-center gap-2"
               >
                 <Plus className="w-5 h-5" />
-                Add Custom Task
+                {t('addCustomTask')}
               </button>
             </div>
           </div>
@@ -207,7 +211,7 @@ export function TaskManager({ patientId, accessToken, onClose, onTasksCreated })
           {selectedTasks.length > 0 && (
             <div className="mt-6 bg-blue-50 rounded-xl p-4">
               <h4 className="font-semibold text-blue-900 mb-2">
-                Selected Tasks ({selectedTasks.length})
+                {t('selectedTasks')} ({selectedTasks.length})
               </h4>
               <div className="space-y-1">
                 {selectedTasks.map((task, idx) => (
@@ -231,7 +235,7 @@ export function TaskManager({ patientId, accessToken, onClose, onTasksCreated })
             disabled={selectedTasks.length === 0 || creating}
             className="w-full bg-blue-600 text-white py-4 rounded-xl font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {creating ? 'Creating Tasks...' : `Create ${selectedTasks.length} Task${selectedTasks.length !== 1 ? 's' : ''}`}
+            {creating ? t('creatingTasks') : `${t('createTasks')} (${selectedTasks.length})`}
           </button>
         </div>
       </div>

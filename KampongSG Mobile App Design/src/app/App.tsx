@@ -40,18 +40,22 @@ export default function App() {
 
   async function loadProfile(token) {
     try {
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-fd25410b/profile`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        }
-      );
+      const headers = {
+        'Authorization': `Bearer ${token}`
+      };
+      const [profileResponse, settingsResponse] = await Promise.all([
+        fetch(`https://${projectId}.supabase.co/functions/v1/make-server-fd25410b/profile`, { headers }),
+        fetch(`https://${projectId}.supabase.co/functions/v1/make-server-fd25410b/settings`, { headers })
+      ]);
 
-      if (response.ok) {
-        const data = await response.json();
+      if (profileResponse.ok) {
+        const data = await profileResponse.json();
         setProfile(data.profile);
+      }
+
+      if (settingsResponse.ok) {
+        const data = await settingsResponse.json();
+        setLanguage(data.settings?.language || 'en-sg');
       }
     } catch (error) {
       console.log('Error loading profile:', error);

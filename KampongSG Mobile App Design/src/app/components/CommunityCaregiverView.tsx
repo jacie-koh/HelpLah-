@@ -1,7 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Settings, MapPin, Users, CheckCircle, Bell, LayoutGrid, Home, FileText, BookOpen, Calendar, MessageCircle } from 'lucide-react';
 import { projectId } from '../../../utils/supabase/info.tsx';
+import { LanguageContext } from '../App';
+import { getTranslation } from '../utils/translations';
 
 export function CommunityCaregiverView({ user, profile, accessToken }) {
   const [isAvailable, setIsAvailable] = useState(false);
@@ -32,6 +34,8 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
     { day: 'Sun', available: false, startTime: '09:00', endTime: '17:00' }
   ]);
   const navigate = useNavigate();
+  const { language } = useContext(LanguageContext);
+  const t = (key) => getTranslation(language, key);
 
   const greetingName = profile?.name || 'Caregiver';
 
@@ -419,6 +423,31 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
     );
   }
 
+  function getCommunityAlerts() {
+    const patientHelpAlerts = getVisibleImmediateAssistancePatients().map((patient) => ({
+      type: 'patient_help',
+      id: `patient_${patient.id}`,
+      patient
+    }));
+
+    const openAssignmentCount = availableAssignments.filter((assignment) => assignment.status === 'open').length;
+    const assignmentDropAlert = openAssignmentCount > 0 ? [{
+      type: 'assignment_drop',
+      id: 'assignment_drop',
+      count: openAssignmentCount,
+      message: `${openAssignmentCount} new assignments available for the next week.`
+    }] : [];
+
+    const incentiveAlerts = [{
+      type: 'incentive',
+      id: 'daily_incentive',
+      title: 'Daily community boost',
+      message: t('volunteerStreak')
+    }];
+
+    return [...patientHelpAlerts, ...assignmentDropAlert, ...incentiveAlerts];
+  }
+
   function isNoteAccessible(note) {
     const now = new Date();
     const assignmentStart = new Date(note.assignmentStart);
@@ -623,7 +652,7 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
       <div className="flex-1 overflow-auto pb-20">
         <div className="p-4">
           <div className="mb-6">
-            <p className="text-sm text-gray-500">Hi {greetingName}, welcome back!</p>
+            <p className="text-sm text-gray-500">{t('welcome')} {greetingName}, {t('welcomeBack')}</p>
           </div>
 
           {activeView === 'home' && (
@@ -631,7 +660,7 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
               <div className="bg-white border-2 border-gray-200 rounded-3xl p-5 mb-6">
                 <div className="flex items-center justify-between mb-4">
                   <div>
-                    <h3 className="text-lg font-bold text-gray-800">My Schedule</h3>
+                    <h3 className="text-lg font-bold text-gray-800">{t('mySchedule')}</h3>
                     <p className="text-sm text-gray-600">{currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</p>
                   </div>
                   <div className="flex items-center gap-2 text-sm text-gray-600">
@@ -707,10 +736,10 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
                 {selectedDate && (
                   <div className="mt-4 border-t pt-4">
                     <h4 className="text-sm font-bold text-gray-800 mb-3">
-                      Assignments for {selectedDate.toLocaleDateString()}
+                      {t('scheduledSupport')} - {selectedDate.toLocaleDateString()}
                     </h4>
                     {getAssignmentsForDate(selectedDate).length === 0 ? (
-                      <p className="text-sm text-gray-600">No assignments available</p>
+                      <p className="text-sm text-gray-600">{t('noCommunitySupport')}</p>
                     ) : (
                       <div className="space-y-2">
                         {getAssignmentsForDate(selectedDate).map((assignment) => (
@@ -726,7 +755,7 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
                                 onClick={() => handleTakeAssignment(assignment.id)}
                                 className="w-full bg-purple-600 text-white rounded-xl py-2 text-sm font-semibold hover:bg-purple-700 transition"
                               >
-                                Take Assignment
+                                {t('add')}
                               </button>
                             ) : (
                               <div className="rounded-xl bg-green-50 px-3 py-2 text-center text-sm font-semibold text-green-700">
@@ -744,7 +773,7 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
               <div className="bg-white border-2 border-gray-200 rounded-3xl p-5 mb-6">
                 <div className="flex items-center justify-between mb-4">
                   <div>
-                    <h3 className="text-lg font-bold text-gray-800">My Availability</h3>
+                    <h3 className="text-lg font-bold text-gray-800">{t('myAvailability')}</h3>
                   </div>
                 </div>
 
@@ -818,9 +847,9 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
               <div className="bg-white border-2 border-gray-200 rounded-3xl p-5">
                 <div className="flex items-center gap-3 mb-3">
                   <Bell className="w-6 h-6 text-orange-600" />
-                  <h3 className="text-lg font-bold text-gray-800">Immediate assistance</h3>
+                  <h3 className="text-lg font-bold text-gray-800">{t('immediateAssistance')}</h3>
                 </div>
-                <p className="text-sm text-gray-600">Patients needing care in the next 24 hours with no assigned caregiver.</p>
+                <p className="text-sm text-gray-600">{t('patientsNeedCare')}</p>
                 {getVisibleImmediateAssistancePatients().length > 0 ? (
                   <div className="mt-4 space-y-3">
                     {getVisibleImmediateAssistancePatients().map(patient => (
@@ -835,14 +864,14 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
                           onClick={() => handleOfferHelp(patient.id)}
                           className="mt-3 w-full bg-orange-600 text-white py-2 rounded-lg text-xs font-semibold hover:bg-orange-700 transition"
                         >
-                          Offer Help
+                          {t('requestHelpNow')}
                         </button>
                       </div>
                     ))}
                   </div>
                 ) : (
                   <div className="mt-4 rounded-2xl bg-slate-50 border border-gray-200 p-4 text-sm text-gray-600">
-                    No immediate needs right now.
+                    {t('noImmediateNeeds')}
                   </div>
                 )}
               </div>
@@ -855,7 +884,7 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
                 <div className="bg-white border-2 border-gray-200 rounded-2xl p-5">
                   <div className="flex items-center gap-3 mb-4">
                     <BookOpen className="w-7 h-7 text-purple-600" />
-                    <h3 className="text-lg font-bold text-gray-800">Community Care Resources</h3>
+                    <h3 className="text-lg font-bold text-gray-800">{t('resourcesSupport')}</h3>
                   </div>
                   <p className="text-gray-600 mb-3">Quick links and support information for community caregivers.</p>
                   <ul className="space-y-2 text-sm text-blue-700">
@@ -903,13 +932,13 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
             <div className="space-y-4">
               <div className="bg-white border-2 border-gray-200 rounded-2xl p-5">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-bold text-gray-800">Community Notes</h3>
+                  <h3 className="text-lg font-bold text-gray-800">{t('communityNotes')}</h3>
                   <select
                     value={selectedPatientId || ''}
                     onChange={(e) => setSelectedPatientId(e.target.value)}
                     className="px-3 py-2 border border-gray-300 rounded-xl text-sm"
                   >
-                    <option value="">Select Patient</option>
+                    <option value="">{t('selectPatient')}</option>
                     {getHandledPatients().map((patient) => (
                       <option key={patient.id} value={patient.id}>
                         {patient.name}
@@ -920,7 +949,7 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
 
                 {getHandledPatients().length === 0 ? (
                   <div className="text-center py-8 text-gray-500">
-                    <p className="text-sm">No active patient notes right now.</p>
+                    <p className="text-sm">{t('noActiveNotes')}</p>
                     <p className="text-xs mt-1">Notes are available only for patients you are handling from 60 minutes before until 60 minutes after the assignment.</p>
                   </div>
                 ) : selectedPatientId && (
@@ -955,7 +984,7 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
                 {getHandledPatients().length > 0 && selectedPatientId ? (
                   getAccessibleNotes().filter(note => note.patientId === selectedPatientId).length === 0 ? (
                     <div className="text-center py-8 text-gray-500">
-                      <p className="text-sm">No accessible notes for this patient.</p>
+                      <p className="text-sm">{t('noAccessibleNotes')}</p>
                       <p className="text-xs mt-1">Notes are only available 60 minutes before and after assignments.</p>
                     </div>
                   ) : (
@@ -984,7 +1013,7 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
                                 onClick={handleCancelNoteEdit}
                                 className="rounded-2xl border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100 transition"
                               >
-                                Cancel
+                                {t('cancel')}
                               </button>
                             </div>
                           </div>
@@ -1010,7 +1039,7 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
                   )
                 ) : getHandledPatients().length > 0 ? (
                   <div className="text-center py-8 text-gray-500">
-                    <p className="text-sm">Please select a patient to view their community notes.</p>
+                    <p className="text-sm">{t('selectPatient')}</p>
                   </div>
                 ) : null}
               </div>
@@ -1021,31 +1050,72 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
             <div className="bg-white border-2 border-gray-200 rounded-3xl p-5">
               <div className="flex items-center gap-3 mb-3">
                 <Bell className="w-6 h-6 text-orange-600" />
-                <h3 className="text-lg font-bold text-gray-800">Alerts</h3>
+                <h3 className="text-lg font-bold text-gray-800">{t('alerts')}</h3>
               </div>
-              <p className="text-sm text-gray-600">Patients needing care in the next 24 hours with no assigned caregiver.</p>
-              {getVisibleImmediateAssistancePatients().length === 0 ? (
+              <p className="text-sm text-gray-600">Care requests, new assignment drops, and daily volunteer prompts.</p>
+              {getCommunityAlerts().length === 0 ? (
                 <div className="mt-4 rounded-2xl bg-slate-50 border border-gray-200 p-4 text-sm text-gray-600">
-                  No nearby requests right now.
+                  {t('noNearbyRequests')}
                 </div>
               ) : (
                 <div className="mt-4 space-y-3">
-                  {getVisibleImmediateAssistancePatients().map((patient) => (
-                    <div key={patient.id} className="rounded-2xl bg-orange-50 border border-orange-200 p-4 text-sm">
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="font-semibold text-orange-900">{patient.name}</p>
-                        <span className="shrink-0 text-xs text-orange-800">{patient.distance}</span>
+                  {getCommunityAlerts().map((alertItem) => {
+                    if (alertItem.type === 'patient_help') {
+                      const { patient } = alertItem;
+
+                      return (
+                        <div key={alertItem.id} className="rounded-2xl bg-orange-50 border border-orange-200 p-4 text-sm">
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="font-semibold text-orange-900">{patient.name}</p>
+                            <span className="shrink-0 text-xs text-orange-800">{patient.distance}</span>
+                          </div>
+                          <p className="text-orange-700 text-xs mt-2">📋 {patient.helpNeeded}</p>
+                          <p className="text-orange-700 text-xs mt-1">🕐 {patient.timeNeeded}</p>
+                          <button
+                            onClick={() => handleOfferHelp(patient.id)}
+                            className="mt-3 w-full bg-orange-600 text-white py-2 rounded-lg text-xs font-semibold hover:bg-orange-700 transition"
+                          >
+                            {t('requestHelpNow')}
+                          </button>
+                        </div>
+                      );
+                    }
+
+                    if (alertItem.type === 'assignment_drop') {
+                      return (
+                        <div key={alertItem.id} className="rounded-2xl bg-blue-50 border border-blue-200 p-4 text-sm">
+                          <div className="flex items-center gap-3">
+                            <Calendar className="w-5 h-5 text-blue-600" />
+                            <div>
+                          <p className="font-semibold text-blue-900">{t('assignmentDrop')}</p>
+                              <p className="text-blue-700 text-xs mt-1">{alertItem.message}</p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => {
+                              setActiveView('home');
+                              setSelectedDate(new Date(Date.now() + 24 * 60 * 60 * 1000));
+                            }}
+                            className="mt-3 w-full bg-blue-600 text-white py-2 rounded-lg text-xs font-semibold hover:bg-blue-700 transition"
+                          >
+                            {t('mySchedule')}
+                          </button>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div key={alertItem.id} className="rounded-2xl bg-green-50 border border-green-200 p-4 text-sm">
+                        <div className="flex items-center gap-3">
+                          <CheckCircle className="w-5 h-5 text-green-600" />
+                          <div>
+                            <p className="font-semibold text-green-900">{alertItem.title}</p>
+                            <p className="text-green-700 text-xs mt-1">{alertItem.message}</p>
+                          </div>
+                        </div>
                       </div>
-                      <p className="text-orange-700 text-xs mt-2">📋 {patient.helpNeeded}</p>
-                      <p className="text-orange-700 text-xs mt-1">🕐 {patient.timeNeeded}</p>
-                      <button
-                        onClick={() => handleOfferHelp(patient.id)}
-                        className="mt-3 w-full bg-orange-600 text-white py-2 rounded-lg text-xs font-semibold hover:bg-orange-700 transition"
-                      >
-                        Offer Help
-                      </button>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -1062,7 +1132,7 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
           }`}
         >
           <Home className="w-6 h-6" />
-          <span className="text-xs font-semibold">Home</span>
+          <span className="text-xs font-semibold">{t('home')}</span>
         </button>
         <button
           onClick={() => setActiveView('resources')}
@@ -1071,7 +1141,7 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
           }`}
         >
           <BookOpen className="w-6 h-6" />
-          <span className="text-xs font-semibold">Resources</span>
+          <span className="text-xs font-semibold">{t('resources')}</span>
         </button>
         <button
           onClick={() => setActiveView('notes')}
@@ -1080,7 +1150,7 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
           }`}
         >
           <FileText className="w-6 h-6" />
-          <span className="text-xs font-semibold">Notes</span>
+          <span className="text-xs font-semibold">{t('patientNotes')}</span>
         </button>
         <button
           onClick={() => setActiveView('notifications')}
@@ -1089,7 +1159,7 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
           }`}
         >
           <Bell className="w-6 h-6" />
-          <span className="text-xs font-semibold">Alerts</span>
+          <span className="text-xs font-semibold">{t('alerts')}</span>
         </button>
       </div>
     </div>

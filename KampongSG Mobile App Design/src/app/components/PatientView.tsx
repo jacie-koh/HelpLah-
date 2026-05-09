@@ -1,7 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell, Mic, AlertCircle, Settings, CheckCircle, Video, Home, LayoutGrid } from 'lucide-react';
 import { projectId } from '../../../utils/supabase/info.tsx';
+import { LanguageContext } from '../App';
+import { getTranslation } from '../utils/translations';
 
 export function PatientView({ user, profile, accessToken }) {
   const [tasks, setTasks] = useState([]);
@@ -9,6 +11,8 @@ export function PatientView({ user, profile, accessToken }) {
   const [location, setLocation] = useState(null);
   const [isHome, setIsHome] = useState(true);
   const navigate = useNavigate();
+  const { language } = useContext(LanguageContext);
+  const t = (key) => getTranslation(language, key);
 
   useEffect(() => {
     if (user?.id && accessToken) {
@@ -135,12 +139,12 @@ export function PatientView({ user, profile, accessToken }) {
         <div className="p-4">
           {/* Welcome Message */}
           <div className="mb-6">
-            <h2 className="text-3xl font-bold text-gray-800">Hello, {profile.name}!</h2>
+            <h2 className="text-3xl font-bold text-gray-800">{t('welcome')} {profile.name}!</h2>
             <p className="text-lg text-gray-600 mt-2 flex items-center gap-2">
               {isHome ? (
                 <>
                   <Home className="w-5 h-5 text-green-600" />
-                  <span>You are home</span>
+                  <span>{t('youAreHome')}</span>
                 </>
               ) : (
                 'Stay safe'
@@ -150,13 +154,13 @@ export function PatientView({ user, profile, accessToken }) {
 
           {/* Today's Tasks */}
           <div className="mb-6">
-            <h3 className="text-2xl font-bold text-gray-800 mb-4">Today's Tasks</h3>
+            <h3 className="text-2xl font-bold text-gray-800 mb-4">{t('todaysTasks')}</h3>
 
             {todayTasks.length === 0 ? (
               <div className="bg-green-50 border-2 border-green-200 rounded-3xl p-8 text-center">
                 <CheckCircle className="w-16 h-16 text-green-600 mx-auto mb-3" />
-                <p className="text-xl font-semibold text-gray-800">All tasks completed!</p>
-                <p className="text-gray-600 mt-1">Great job today!</p>
+                <p className="text-xl font-semibold text-gray-800">{t('allTasksCompleted')}</p>
+                <p className="text-gray-600 mt-1">{t('greatJobToday')}</p>
               </div>
             ) : (
               <div className="space-y-4">
@@ -200,7 +204,7 @@ export function PatientView({ user, profile, accessToken }) {
           {/* Completed Tasks */}
           {completedTasks.length > 0 && (
             <div className="mb-6">
-              <h3 className="text-xl font-bold text-gray-800 mb-3">Completed</h3>
+              <h3 className="text-xl font-bold text-gray-800 mb-3">{t('completed')}</h3>
               <div className="space-y-2">
                 {completedTasks.map((task) => (
                   <div
@@ -229,7 +233,7 @@ export function PatientView({ user, profile, accessToken }) {
             }`}
           >
             <Mic className="w-7 h-7" />
-            {isRecording ? 'Stop Recording' : 'Share Note'}
+            {isRecording ? t('stopRecording') : t('shareNote')}
           </button>
 
           <button
@@ -237,7 +241,7 @@ export function PatientView({ user, profile, accessToken }) {
             className="bg-red-600 text-white py-5 rounded-2xl font-bold text-lg hover:bg-red-700 shadow-md transition-all flex items-center justify-center gap-3 active:scale-95"
           >
             <AlertCircle className="w-7 h-7" />
-            Need Help
+            {t('needHelp')}
           </button>
         </div>
       </div>
