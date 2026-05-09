@@ -327,6 +327,272 @@ function bytesToBase64(buffer: ArrayBuffer) {
   return btoa(binary);
 }
 
+const HOME_GEOFENCE_METERS = 120;
+const COMMUNITY_ALERT_RADIUS_METERS = 5000;
+
+function metersBetween(a: { latitude: number; longitude: number }, b: { latitude: number; longitude: number }) {
+  const toRad = (value: number) => value * Math.PI / 180;
+  const earthRadiusMeters = 6371000;
+  const dLat = toRad(b.latitude - a.latitude);
+  const dLon = toRad(b.longitude - a.longitude);
+  const lat1 = toRad(a.latitude);
+  const lat2 = toRad(b.latitude);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return 2 * earthRadiusMeters * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+}
+
+function coordinateLabel(latitude: number, longitude: number) {
+  return `${Number(latitude).toFixed(5)}, ${Number(longitude).toFixed(5)}`;
+}
+
+function isCoordinateLabel(value: unknown) {
+  return typeof value === 'string' && /^-?\d+(\.\d+)?,\s*-?\d+(\.\d+)?$/.test(value.trim());
+}
+
+function isValidCoordinate(latitude: unknown, longitude: unknown) {
+  return Number.isFinite(Number(latitude)) && Number.isFinite(Number(longitude));
+}
+
+function pickAddressFromOneMap(payload: any) {
+  const candidates = [
+    ...(Array.isArray(payload?.GeocodeInfo) ? payload.GeocodeInfo : []),
+    ...(Array.isArray(payload?.geocodeInfo) ? payload.geocodeInfo : []),
+    ...(Array.isArray(payload?.results) ? payload.results : [])
+  ];
+  const first = candidates.find(Boolean);
+  if (!first) return '';
+
+  const direct = first.ADDRESS || first.address || first.formatted_address || first.SEARCHVAL;
+  if (typeof direct === 'string' && direct.trim()) return direct.trim();
+
+  const parts = [
+    first.BLOCK,
+    first.BUILDINGNAME,
+    first.ROAD,
+    first.POSTALCODE ? `Singapore ${first.POSTALCODE}` : ''
+  ].filter((part) => typeof part === 'string' && part.trim());
+  return parts.join(', ');
+}
+
+function pickAddressFromNominatim(payload: any) {
+  if (typeof payload?.display_name === 'string' && payload.display_name.trim()) {
+    return payload.display_name.trim();
+  }
+  return '';
+}
+
+function pickPointFromOneMapSearch(payload: any) {
+  const candidates = Array.isArray(payload?.results) ? payload.results : [];
+  const first = candidates.find((result: any) =>
+    isValidCoordinate(result?.LATITUDE, result?.LONGITUDE) ||
+    isValidCoordinate(result?.latitude, result?.longitude)
+  );
+  if (!first) return null;
+
+  return {
+    latitude: Number(first.LATITUDE ?? first.latitude),
+    longitude: Number(first.LONGITUDE ?? first.longitude),
+    address: first.ADDRESS || first.SEARCHVAL || first.address || ''
+  };
+}
+
+async function geocodeAddress(address: string) {
+  if (!address?.trim()) return null;
+
+  try {
+    const oneMapUrl = new URL('https://www.onemap.gov.sg/api/common/elastic/search');
+    oneMapUrl.searchParams.set('searchVal', address.trim());
+    oneMapUrl.searchParams.set('returnGeom', 'Y');
+    oneMapUrl.searchParams.set('getAddrDetails', 'Y');
+    oneMapUrl.searchParams.set('pageNum', '1');
+    const response = await fetch(oneMapUrl.toString());
+    if (response.ok) {
+      const data = await response.json();
+      const point = pickPointFromOneMapSearch(data);
+      if (point) return point;
+    }
+  } catch (error) {
+    console.log(`OneMap address geocode error: ${error}`);
+  }
+
+  try {
+    const nominatimUrl = new URL('https://nominatim.openstreetmap.org/search');
+    nominatimUrl.searchParams.set('format', 'jsonv2');
+    nominatimUrl.searchParams.set('q', address.trim());
+    nominatimUrl.searchParams.set('limit', '1');
+    const response = await fetch(nominatimUrl.toString(), {
+      headers: { 'User-Agent': 'HelpLah/1.0 location safety app' }
+    });
+    if (response.ok) {
+      const data = await response.json();
+      const first = Array.isArray(data) ? data[0] : null;
+      if (first && isValidCoordinate(first.lat, first.lon)) {
+        return {
+          latitude: Number(first.lat),
+          longitude: Number(first.lon),
+          address: first.display_name || address.trim()
+        };
+      }
+    }
+  } catch (error) {
+    console.log(`Nominatim address geocode error: ${error}`);
+  }
+
+  return null;
+}
+
+async function reverseGeocode(latitude: number, longitude: number) {
+  const location = `${latitude},${longitude}`;
+
+  try {
+    const oneMapUrl = new URL('https://www.onemap.gov.sg/api/public/revgeocode');
+    oneMapUrl.searchParams.set('location', location);
+    oneMapUrl.searchParams.set('buffer', '80');
+    oneMapUrl.searchParams.set('addressType', 'All');
+    const response = await fetch(oneMapUrl.toString());
+    if (response.ok) {
+      const data = await response.json();
+      const address = pickAddressFromOneMap(data);
+      if (address) return address;
+    }
+  } catch (error) {
+    console.log(`OneMap reverse geocode error: ${error}`);
+  }
+
+  try {
+    const nominatimUrl = new URL('https://nominatim.openstreetmap.org/reverse');
+    nominatimUrl.searchParams.set('format', 'jsonv2');
+    nominatimUrl.searchParams.set('lat', String(latitude));
+    nominatimUrl.searchParams.set('lon', String(longitude));
+    nominatimUrl.searchParams.set('zoom', '18');
+    nominatimUrl.searchParams.set('addressdetails', '1');
+    const response = await fetch(nominatimUrl.toString(), {
+      headers: { 'User-Agent': 'HelpLah/1.0 location safety app' }
+    });
+    if (response.ok) {
+      const data = await response.json();
+      const address = pickAddressFromNominatim(data);
+      if (address) return address;
+    }
+  } catch (error) {
+    console.log(`Nominatim reverse geocode error: ${error}`);
+  }
+
+  return '';
+}
+
+async function createNotification(userId: string, notification: Record<string, unknown>) {
+  const id = crypto.randomUUID();
+  const item = {
+    id,
+    userId,
+    dismissed: false,
+    createdAt: new Date().toISOString(),
+    ...notification
+  };
+  await kv.set(`notification:${id}`, item);
+
+  const notificationIds = await kv.get(`user:${userId}:notifications`) || [];
+  await kv.set(`user:${userId}:notifications`, [id, ...notificationIds].slice(0, 100));
+  return item;
+}
+
+async function getUserProfile(userId: string) {
+  return await kv.get(`user:${userId}`);
+}
+
+async function getPrimaryCaregiverIdForPatient(patientId: string) {
+  const patientProfile = await getUserProfile(patientId);
+  return patientProfile?.primaryCaregiverId || null;
+}
+
+async function getConfiguredHomeAddressForPatient(patientId: string) {
+  const patientSettings = await kv.get(`settings:${patientId}`);
+  if (typeof patientSettings?.homeAddress === 'string' && patientSettings.homeAddress.trim()) {
+    return patientSettings.homeAddress.trim();
+  }
+
+  const primaryCaregiverId = await getPrimaryCaregiverIdForPatient(patientId);
+  if (primaryCaregiverId) {
+    const caregiverSettings = await kv.get(`settings:${primaryCaregiverId}`);
+    if (typeof caregiverSettings?.homeAddress === 'string' && caregiverSettings.homeAddress.trim()) {
+      return caregiverSettings.homeAddress.trim();
+    }
+  }
+
+  return '';
+}
+
+async function updatePatientGeofence(patientId: string, latitude: number, longitude: number, address?: string) {
+  const point = { latitude, longitude };
+  const geofenceKey = `patient:${patientId}:geofence`;
+  const currentState = await kv.get(geofenceKey);
+  const now = new Date().toISOString();
+  const configuredHomeAddress = await getConfiguredHomeAddressForPatient(patientId);
+  const shouldRefreshHomePoint =
+    configuredHomeAddress &&
+    currentState?.configuredHomeAddress !== configuredHomeAddress;
+  const configuredHomePoint = shouldRefreshHomePoint
+    ? await geocodeAddress(configuredHomeAddress)
+    : null;
+  const hasConfiguredHome = Boolean(configuredHomeAddress);
+
+  if (!currentState?.homeLatitude || !currentState?.homeLongitude) {
+    const initialState = {
+      patientId,
+      homeLatitude: configuredHomePoint?.latitude ?? latitude,
+      homeLongitude: configuredHomePoint?.longitude ?? longitude,
+      homeAddress: configuredHomeAddress || 'Home address not set',
+      configuredHomeAddress,
+      isHome: true,
+      distanceFromHomeMeters: hasConfiguredHome ? 0 : null,
+      homeDistanceAvailable: hasConfiguredHome,
+      updatedAt: now
+    };
+    await kv.set(geofenceKey, initialState);
+    return initialState;
+  }
+
+  const home = {
+    latitude: Number(configuredHomePoint?.latitude ?? currentState.homeLatitude),
+    longitude: Number(configuredHomePoint?.longitude ?? currentState.homeLongitude)
+  };
+  const distanceFromHomeMeters = hasConfiguredHome ? Math.round(metersBetween(home, point)) : null;
+  const isHome = hasConfiguredHome ? distanceFromHomeMeters <= HOME_GEOFENCE_METERS : true;
+  const primaryCaregiverId = await getPrimaryCaregiverIdForPatient(patientId);
+
+  if (hasConfiguredHome && primaryCaregiverId && currentState.isHome !== isHome) {
+    await createNotification(primaryCaregiverId, {
+      type: isHome ? 'patient_returned_home' : 'patient_left_home',
+      patientId,
+      messageKey: isHome ? 'patientReturnedHome' : 'patientLeftHome',
+      location: address || coordinateLabel(latitude, longitude),
+      coordinates: { lat: latitude, lng: longitude },
+      time: now,
+      severity: isHome ? 'info' : 'warning'
+    });
+  }
+
+  const nextState = {
+    ...currentState,
+    homeLatitude: home.latitude,
+    homeLongitude: home.longitude,
+    homeAddress: configuredHomeAddress || 'Home address not set',
+    configuredHomeAddress: configuredHomeAddress || '',
+    isHome,
+    distanceFromHomeMeters,
+    homeDistanceAvailable: hasConfiguredHome,
+    updatedAt: now,
+    lastLatitude: latitude,
+    lastLongitude: longitude,
+    lastAddress: address || coordinateLabel(latitude, longitude)
+  };
+  await kv.set(geofenceKey, nextState);
+  return nextState;
+}
+
 app.get("/make-server-fd25410b/health", (c) => {
   return c.json({ status: "ok" });
 });
@@ -486,12 +752,69 @@ app.get("/make-server-fd25410b/patient/:patientId/voice-notes", async (c) => {
   return c.json({ notes: notes.filter(n => n !== null) });
 });
 
+app.patch("/make-server-fd25410b/voice-notes/:noteId", async (c) => {
+  const user = await getAuthenticatedUser(c.req.header('Authorization'));
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+  const noteId = c.req.param('noteId');
+  const note = await kv.get(`voicenote:${noteId}`);
+  if (!note) return c.json({ error: "Note not found" }, 404);
+
+  const { transcription, summary, audioUrl } = await c.req.json();
+  const updatedNote = {
+    ...note,
+    transcription: typeof transcription === 'string' ? transcription : note.transcription,
+    summary: typeof summary === 'string' ? summary : note.summary,
+    audioUrl: typeof audioUrl === 'string' ? audioUrl : note.audioUrl,
+    updatedAt: new Date().toISOString()
+  };
+  await kv.set(`voicenote:${noteId}`, updatedNote);
+  return c.json({ note: updatedNote });
+});
+
 app.post("/make-server-fd25410b/location", async (c) => {
   const user = await getAuthenticatedUser(c.req.header('Authorization'));
   if (!user) return c.json({ error: "Unauthorized" }, 401);
   const { latitude, longitude, address } = await c.req.json();
-  await kv.set(`location:${user.id}`, { userId: user.id, latitude, longitude, address, updatedAt: new Date().toISOString() });
-  return c.json({ success: true });
+  if (!isValidCoordinate(latitude, longitude)) {
+    return c.json({ error: "Invalid GPS coordinates" }, 400);
+  }
+
+  const numericLatitude = Number(latitude);
+  const numericLongitude = Number(longitude);
+  const updatedAt = new Date().toISOString();
+  const resolvedAddress = typeof address === 'string' && address.trim() && !isCoordinateLabel(address)
+    ? address.trim()
+    : await reverseGeocode(numericLatitude, numericLongitude);
+  const savedLocation = {
+    userId: user.id,
+    latitude: numericLatitude,
+    longitude: numericLongitude,
+    address: resolvedAddress || null,
+    updatedAt
+  };
+  await kv.set(`location:${user.id}`, savedLocation);
+
+  const profile = await getUserProfile(user.id);
+  let geofence = null;
+  if (profile?.role === 'patient') {
+    geofence = await updatePatientGeofence(user.id, numericLatitude, numericLongitude, savedLocation.address);
+  }
+
+  return c.json({ success: true, location: savedLocation, geofence });
+});
+
+app.get("/make-server-fd25410b/location/reverse-geocode", async (c) => {
+  const user = await getAuthenticatedUser(c.req.header('Authorization'));
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+  const latitude = c.req.query('latitude');
+  const longitude = c.req.query('longitude');
+  if (!isValidCoordinate(latitude, longitude)) {
+    return c.json({ error: "Invalid GPS coordinates" }, 400);
+  }
+
+  const address = await reverseGeocode(Number(latitude), Number(longitude));
+  return c.json({ address });
 });
 
 app.get("/make-server-fd25410b/location/:userId", async (c) => {
@@ -500,6 +823,128 @@ app.get("/make-server-fd25410b/location/:userId", async (c) => {
   const userId = c.req.param('userId');
   const location = await kv.get(`location:${userId}`);
   return c.json({ location });
+});
+
+app.get("/make-server-fd25410b/notifications", async (c) => {
+  const user = await getAuthenticatedUser(c.req.header('Authorization'));
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+  const notificationIds = await kv.get(`user:${user.id}:notifications`) || [];
+  const notifications = await Promise.all(notificationIds.map((id: string) => kv.get(`notification:${id}`)));
+  return c.json({
+    notifications: notifications
+      .filter((notification) => notification && !notification.dismissed)
+      .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+  });
+});
+
+app.post("/make-server-fd25410b/notifications/:notificationId/dismiss", async (c) => {
+  const user = await getAuthenticatedUser(c.req.header('Authorization'));
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+  const notificationId = c.req.param('notificationId');
+  const notification = await kv.get(`notification:${notificationId}`);
+  if (!notification || notification.userId !== user.id) return c.json({ error: "Notification not found" }, 404);
+
+  await kv.set(`notification:${notificationId}`, {
+    ...notification,
+    dismissed: true,
+    dismissedAt: new Date().toISOString()
+  });
+
+  return c.json({ success: true });
+});
+
+app.post("/make-server-fd25410b/patient/lost-alert", async (c) => {
+  const user = await getAuthenticatedUser(c.req.header('Authorization'));
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+  const profile = await getUserProfile(user.id);
+  if (profile?.role !== 'patient') return c.json({ error: "Only patient devices can send lost alerts" }, 403);
+
+  const { latitude, longitude, address } = await c.req.json();
+  if (!isValidCoordinate(latitude, longitude)) {
+    return c.json({ error: "Invalid GPS coordinates" }, 400);
+  }
+
+  const numericLatitude = Number(latitude);
+  const numericLongitude = Number(longitude);
+  const now = new Date().toISOString();
+  const locationLabel = typeof address === 'string' && address.trim() && !isCoordinateLabel(address)
+    ? address.trim()
+    : await reverseGeocode(numericLatitude, numericLongitude);
+  const primaryCaregiverId = profile.primaryCaregiverId;
+
+  await kv.set(`location:${user.id}`, {
+    userId: user.id,
+    latitude: numericLatitude,
+    longitude: numericLongitude,
+    address: locationLabel,
+    updatedAt: now
+  });
+
+  if (primaryCaregiverId) {
+    await createNotification(primaryCaregiverId, {
+      type: 'patient_lost',
+      patientId: user.id,
+      messageKey: 'patientPressedLostButton',
+      location: locationLabel,
+      coordinates: { lat: numericLatitude, lng: numericLongitude },
+      time: now,
+      severity: 'critical'
+    });
+  }
+
+  const alertId = crypto.randomUUID();
+  const lostAlert = {
+    id: alertId,
+    patientId: user.id,
+    patientName: profile.name,
+    primaryCaregiverId,
+    latitude: numericLatitude,
+    longitude: numericLongitude,
+    address: locationLabel,
+    status: 'active',
+    createdAt: now,
+    updatedAt: now
+  };
+
+  await kv.set(`lost-alert:${alertId}`, lostAlert);
+  const activeAlertIds = await kv.get('lost-alerts:active') || [];
+  await kv.set('lost-alerts:active', [alertId, ...activeAlertIds].slice(0, 100));
+
+  return c.json({ success: true, alert: lostAlert });
+});
+
+app.get("/make-server-fd25410b/community/lost-alerts", async (c) => {
+  const user = await getAuthenticatedUser(c.req.header('Authorization'));
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+  const activeAlertIds = await kv.get('lost-alerts:active') || [];
+  const alerts = (await Promise.all(activeAlertIds.map((id: string) => kv.get(`lost-alert:${id}`))))
+    .filter((alert) => alert && alert.status === 'active');
+  const caregiverLocation = await kv.get(`location:${user.id}`);
+
+  const enrichedAlerts = alerts.map((alert) => {
+    const distanceMeters = caregiverLocation?.latitude && caregiverLocation?.longitude
+      ? Math.round(metersBetween(
+          { latitude: Number(caregiverLocation.latitude), longitude: Number(caregiverLocation.longitude) },
+          { latitude: Number(alert.latitude), longitude: Number(alert.longitude) }
+        ))
+      : null;
+
+    return {
+      ...alert,
+      distanceMeters,
+      distanceLabel: distanceMeters == null ? null : `${(distanceMeters / 1000).toFixed(1)} km`
+    };
+  });
+
+  return c.json({
+    alerts: enrichedAlerts.filter((alert) =>
+      alert.distanceMeters == null || alert.distanceMeters <= COMMUNITY_ALERT_RADIUS_METERS
+    )
+  });
 });
 
 app.post("/make-server-fd25410b/assessment", async (c) => {
@@ -682,9 +1127,13 @@ app.post("/make-server-fd25410b/ai/stt", async (c) => {
     const { audioBase64, mimeType = 'audio/webm', language = 'en-sg' } = await c.req.json();
     if (!audioBase64) return c.json({ error: "Missing audioBase64" }, 400);
 
-    const response = await runSeaLionWorkerEndpoint('/stt', { audioBase64, mimeType, language })
-      || await runCloudflareAi(STT_MODEL, base64ToBytes(audioBase64), mimeType);
-    const data = await response.json();
+    let response = await runSeaLionWorkerEndpoint('/stt', { audioBase64, mimeType, language });
+    let data = response ? await parseResponseJsonSafely(response) : null;
+
+    if (!response || !response.ok || data?.success === false) {
+      response = await runCloudflareAi(STT_MODEL, base64ToBytes(audioBase64), mimeType);
+      data = await parseResponseJsonSafely(response);
+    }
 
     if (!response.ok || data?.success === false) {
       return c.json({ error: data?.errors?.[0]?.message || 'Speech-to-text request failed' }, 502);

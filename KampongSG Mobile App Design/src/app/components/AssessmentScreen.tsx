@@ -1,9 +1,10 @@
 import { useContext, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, CheckCircle } from 'lucide-react';
+import { ArrowLeft, CheckCircle, Volume2 } from 'lucide-react';
 import { supabaseFunctionsApiBase } from '../../../utils/supabase/api';
 import { LanguageContext } from '../App';
 import { getTranslation } from '../utils/translations';
+import { speakText } from '../utils/voice';
 
 const ASSESSMENT_IDS = Array.from({ length: 12 }, (_, i) => i + 1);
 
@@ -25,11 +26,19 @@ export function AssessmentScreen({ user, profile, accessToken, patientId }) {
   const [isComplete, setIsComplete] = useState(false);
   const [totalScore, setTotalScore] = useState(0);
   const navigate = useNavigate();
-  const { language } = useContext(LanguageContext);
+  const { language, accessibilitySettings } = useContext(LanguageContext);
   const t = (key: string, vars?: Record<string, string | number>) =>
     getTranslation(language, key, vars);
 
   const questionId = ASSESSMENT_IDS[currentQuestionIndex];
+
+  async function handleReadQuestion() {
+    if (!accessibilitySettings.textToSpeech) {
+      alert(t('alertTextToSpeechOff'));
+      return;
+    }
+    await speakText(t(zbKey(questionId)), language, accessToken);
+  }
 
   function handleAnswer(questionId_: number, value: number) {
     const newAnswers = { ...answers, [questionId_]: value };
@@ -174,9 +183,19 @@ export function AssessmentScreen({ user, profile, accessToken, patientId }) {
         </div>
 
         <div className="bg-white rounded-3xl p-8 shadow-xl mb-6">
-          <h2 className="text-2xl font-semibold text-gray-800 text-center leading-relaxed">
-            {t(zbKey(questionId))}
-          </h2>
+          <div className="flex items-start justify-center gap-3">
+            <button
+              onClick={handleReadQuestion}
+              disabled={!accessibilitySettings.textToSpeech}
+              className="mt-1 rounded-xl bg-blue-50 p-2 text-blue-600 hover:bg-blue-100 disabled:opacity-40 disabled:cursor-not-allowed"
+              title={t('tooltipReadAloud')}
+            >
+              <Volume2 className="w-5 h-5" />
+            </button>
+            <h2 className="text-2xl font-semibold text-gray-800 text-center leading-relaxed">
+              {t(zbKey(questionId))}
+            </h2>
+          </div>
         </div>
 
         <div className="space-y-3">

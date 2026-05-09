@@ -163,7 +163,8 @@ export default {
       const audioBase64 = (body as { audioBase64?: string }).audioBase64;
       if (!audioBase64) return json({ error: "Request must include 'audioBase64'." }, { status: 400 });
 
-      const response = await env.AI.run(STT_MODEL, base64ToBytes(audioBase64));
+      const audio = [...base64ToBytes(audioBase64)];
+      const response = await env.AI.run(STT_MODEL, { audio });
       return json(response);
     }
 

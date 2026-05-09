@@ -6,8 +6,8 @@ const API_BASE = supabaseFunctionsApiBase;
 const speechLanguageMap = {
   'en-sg': 'en-SG',
   'zh-sg': 'zh-CN',
-  'zh-min': 'zh-CN',
-  'zh-yue': 'zh-HK',
+  'zh-min': 'nan-SG',
+  'zh-yue': 'yue-HK',
   'ms-sg': 'ms-MY',
   'ta-sg': 'ta-IN'
 };
@@ -16,16 +16,39 @@ function getSpeechLanguage(language: string) {
   return speechLanguageMap[language] || speechLanguageMap['en-sg'];
 }
 
-function playBrowserSpeech(text: string, language: string) {
+async function getBrowserVoices() {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) return [];
+
+  const voices = window.speechSynthesis.getVoices();
+  if (voices.length > 0) return voices;
+
+  return new Promise<SpeechSynthesisVoice[]>((resolve) => {
+    const timeout = window.setTimeout(() => resolve(window.speechSynthesis.getVoices()), 500);
+    window.speechSynthesis.onvoiceschanged = () => {
+      window.clearTimeout(timeout);
+      resolve(window.speechSynthesis.getVoices());
+    };
+  });
+}
+
+async function playBrowserSpeech(text: string, language: string) {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
     alert(text);
     return false;
   }
 
   window.speechSynthesis.cancel();
+  window.speechSynthesis.resume();
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = getSpeechLanguage(language);
   utterance.rate = 0.9;
+  const voices = await getBrowserVoices();
+  const targetLang = utterance.lang.toLowerCase();
+  const targetBase = targetLang.split('-')[0];
+  const matchingVoice = voices.find((voice) => voice.lang.toLowerCase() === targetLang)
+    || voices.find((voice) => voice.lang.toLowerCase().startsWith(`${targetBase}-`));
+  if (matchingVoice) utterance.voice = matchingVoice;
+
   window.speechSynthesis.speak(utterance);
   return true;
 }
@@ -33,31 +56,8 @@ function playBrowserSpeech(text: string, language: string) {
 export async function speakText(text: string, language: string, accessToken?: string) {
   if (!text.trim()) return false;
 
-  if (accessToken) {
-    try {
-      const response = await fetch(`${API_BASE}/ai/tts`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-          apikey: publicAnonKey
-        },
-        body: JSON.stringify({ text, language })
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.audioBase64) {
-          const audio = new Audio(`data:${data.mimeType || 'audio/mpeg'};base64,${data.audioBase64}`);
-          await audio.play();
-          return true;
-        }
-      }
-    } catch (error) {
-      console.log('Cloudflare TTS unavailable, using browser speech:', error);
-    }
-  }
-
+  // Keep TTS in the user gesture path. The remote Cloudflare audio route can 502 on model/provider
+  // issues, while browser speech gives reliable local read-aloud for every speaker icon.
   return playBrowserSpeech(text, language);
 }
 

@@ -1,5 +1,5 @@
 import { useContext, useState } from 'react';
-import { X, Plus, Video, Image, Mic } from 'lucide-react';
+import { X, Plus, Video, Image, Mic, Upload } from 'lucide-react';
 import { supabaseFunctionsApiBase } from '../../../utils/supabase/api';
 import { LanguageContext } from '../App';
 import { getTranslation } from '../utils/translations';
@@ -23,6 +23,7 @@ export function TaskManager({ patientId, accessToken, onClose, onTasksCreated })
   const [customTime, setCustomTime] = useState('');
   const [customVideoUrl, setCustomVideoUrl] = useState('');
   const [customImageUrl, setCustomImageUrl] = useState('');
+  const [customImageName, setCustomImageName] = useState('');
   const [creating, setCreating] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const { language, accessibilitySettings } = useContext(LanguageContext);
@@ -73,6 +74,35 @@ export function TaskManager({ patientId, accessToken, onClose, onTasksCreated })
     }
   }
 
+  function handleImageUpload(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert(t('alertUploadImageOnly'));
+      event.target.value = '';
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      alert(t('alertImageTooLarge'));
+      event.target.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setCustomImageUrl(String(reader.result || ''));
+      setCustomImageName(file.name);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function clearUploadedImage() {
+    setCustomImageUrl('');
+    setCustomImageName('');
+  }
+
   function addCustomTask() {
     if (!customTitle) return;
 
@@ -88,6 +118,7 @@ export function TaskManager({ patientId, accessToken, onClose, onTasksCreated })
     setCustomTime('');
     setCustomVideoUrl('');
     setCustomImageUrl('');
+    setCustomImageName('');
   }
 
   async function createTasks() {
@@ -216,13 +247,38 @@ export function TaskManager({ patientId, accessToken, onClose, onTasksCreated })
                 placeholder={t('videoUrl')}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-              <input
-                type="url"
-                value={customImageUrl}
-                onChange={(e) => setCustomImageUrl(e.target.value)}
-                placeholder={t('imageUrl')}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+              <div>
+                <label className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-gray-300 px-4 py-3 text-gray-700 transition-colors hover:border-blue-400 hover:bg-blue-50">
+                  <Upload className="w-5 h-5" />
+                  <span className="font-medium">{customImageName || t('uploadImage')}</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    className="hidden"
+                  />
+                </label>
+                {customImageUrl && (
+                  <div className="mt-2 flex items-center gap-3 rounded-xl bg-purple-50 p-3">
+                    <img
+                      src={customImageUrl}
+                      alt={customImageName || t('labelImage')}
+                      className="h-14 w-14 rounded-lg object-cover"
+                    />
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-purple-900">
+                      {customImageName || t('selectedImage')}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={clearUploadedImage}
+                      className="rounded-lg p-2 text-purple-700 hover:bg-purple-100"
+                      title={t('removeImage')}
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+              </div>
               <button
                 onClick={addCustomTask}
                 className="w-full bg-gray-100 text-gray-700 py-3 rounded-xl font-medium hover:bg-gray-200 transition-colors flex items-center justify-center gap-2"

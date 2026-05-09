@@ -1,10 +1,11 @@
 import { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Settings, MapPin, Users, CheckCircle, Bell, LayoutGrid, Home, FileText, BookOpen, Calendar, MessageCircle } from 'lucide-react';
+import { Settings, MapPin, Users, CheckCircle, Bell, LayoutGrid, Home, FileText, BookOpen, Calendar, MessageCircle, Mic } from 'lucide-react';
 import { supabaseFunctionsApiBase } from '../../../utils/supabase/api';
 import { LanguageContext } from '../App';
 import { getTranslation } from '../utils/translations';
 import { useDynamicTranslations } from '../utils/dynamicTranslations';
+import { recordSpeechToText } from '../utils/voice';
 
 export function CommunityCaregiverView({ user, profile, accessToken }) {
   const [isAvailable, setIsAvailable] = useState(false);
@@ -12,12 +13,14 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
   const [patients, setPatients] = useState([]);
   const [communityNotes, setCommunityNotes] = useState([]);
   const [supportRequests, setSupportRequests] = useState([]);
+  const [lostAlerts, setLostAlerts] = useState([]);
   const [activeView, setActiveView] = useState('home');
   const [newNoteTitle, setNewNoteTitle] = useState('');
   const [newNoteSummary, setNewNoteSummary] = useState('');
   const [editingNoteId, setEditingNoteId] = useState(null);
   const [editingTitle, setEditingTitle] = useState('');
   const [editingSummary, setEditingSummary] = useState('');
+  const [recordingNoteField, setRecordingNoteField] = useState(null);
   const [selectedPatientId, setSelectedPatientId] = useState(null);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(null);
@@ -64,6 +67,8 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
       ...getCommunityAlerts().flatMap((alertItem) => [
         alertItem.message,
         alertItem.title,
+        alertItem.alert?.address,
+        alertItem.alert?.distanceLabel,
         alertItem.patient?.helpNeeded,
         alertItem.patient?.timeNeeded,
         alertItem.patient?.distance
@@ -95,9 +100,17 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
     if (user?.id && accessToken) {
       loadAvailability();
       loadPatients();
+      loadLostAlerts();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (isAvailable) {
+      reportCurrentLocation();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAvailable]);
 
   async function loadAvailability() {
     try {
@@ -114,6 +127,71 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
     } catch (error) {
       console.log('Error loading availability:', error);
     }
+  }
+
+  async function reportCurrentLocation() {
+    if (!navigator?.geolocation || !accessToken || !user?.id) {
+      return;
+    }
+
+    return new Promise((resolve) => {
+      navigator.geolocation.getCurrentPosition(async (position) => {
+        const location = {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          address: `${position.coords.latitude.toFixed(5)}, ${position.coords.longitude.toFixed(5)}`
+        };
+
+        try {
+            await fetch(
+              `${supabaseFunctionsApiBase}/location`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${accessToken}`
+              },
+              body: JSON.stringify(location)
+              }
+            );
+            await loadLostAlerts();
+          } catch (error) {
+            console.log('Error reporting current location:', error);
+          }
+
+        resolve(location);
+      }, (error) => {
+        console.log('Geolocation error:', error);
+        resolve(null);
+      }, { enableHighAccuracy: true, timeout: 10000 });
+    });
+  }
+
+  async function loadLostAlerts() {
+    if (!accessToken) return;
+
+    try {
+      const response = await fetch(
+        `${supabaseFunctionsApiBase}/community/lost-alerts`,
+        { headers: { 'Authorization': `Bearer ${accessToken}` } }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        setLostAlerts(data.alerts || []);
+      }
+    } catch (error) {
+      console.log('Error loading lost alerts:', error);
+    }
+  }
+
+  function openLostAlertMap(alert) {
+    if (!alert?.latitude || !alert?.longitude) return;
+    window.open(
+      `https://www.google.com/maps/dir/?api=1&destination=${alert.latitude},${alert.longitude}`,
+      '_blank',
+      'noopener,noreferrer'
+    );
   }
 
   async function saveAvailability(available) {
@@ -329,6 +407,10 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
         }
       );
 
+      if (newAvailability) {
+        await reportCurrentLocation();
+      }
+
       alert(newAvailability ? t('alertNowAvailable') : t('alertNowUnavailable'));
     } catch (error) {
       console.log('Error updating availability:', error);
@@ -355,6 +437,7 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
           })
         }
       );
+      await reportCurrentLocation();
     } catch (error) {
       console.log('Error taking over care:', error);
     }
@@ -486,6 +569,14 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
       patient
     }));
 
+    const lostPatientAlerts = lostAlerts.map((alert) => ({
+      type: 'lost_patient',
+      id: `lost_${alert.id}`,
+      alert,
+      title: t('lostPatientNearby'),
+      message: t('patientPressedLostButton')
+    }));
+
     const openAssignmentCount = availableAssignments.filter((assignment) => assignment.status === 'open').length;
     const assignmentDropAlert = openAssignmentCount > 0 ? [{
       type: 'assignment_drop',
@@ -501,7 +592,7 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
       message: t('volunteerStreak')
     }];
 
-    return [...patientHelpAlerts, ...assignmentDropAlert, ...incentiveAlerts];
+    return [...lostPatientAlerts, ...patientHelpAlerts, ...assignmentDropAlert, ...incentiveAlerts];
   }
 
   function isNoteAccessible(note) {
@@ -598,6 +689,33 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
     setEditingNoteId(null);
     setEditingTitle('');
     setEditingSummary('');
+  }
+
+  async function handleDictateNoteField(field) {
+    if (!accessibilitySettings.speechToText) {
+      alert(t('alertSpeechToTextOff'));
+      return;
+    }
+
+    setRecordingNoteField(field);
+    try {
+      alert(t('alertVoiceRecordingStartedShort'));
+      const transcript = await recordSpeechToText(language, accessToken);
+      if (!transcript) {
+        alert(t('alertTranscribeFailed'));
+        return;
+      }
+
+      if (field === 'title') setNewNoteTitle((current) => current ? `${current} ${transcript}` : transcript);
+      if (field === 'summary') setNewNoteSummary((current) => current ? `${current} ${transcript}` : transcript);
+      if (field === 'editTitle') setEditingTitle((current) => current ? `${current} ${transcript}` : transcript);
+      if (field === 'editSummary') setEditingSummary((current) => current ? `${current} ${transcript}` : transcript);
+    } catch (error) {
+      console.log('Note dictation error:', error);
+      alert(t('alertMicrophoneUnavailable'));
+    } finally {
+      setRecordingNoteField(null);
+    }
   }
 
   function navigateMonth(direction) {
@@ -1007,31 +1125,8 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
                     <p className="text-xs mt-1">{t('notesWindow')}</p>
                   </div>
                 ) : selectedPatientId && (
-                  <div className="mb-4">
-                    <div className="flex items-center gap-2 mb-3">
-                      <input
-                        type="text"
-                        placeholder={t('noteTitlePlaceholder')}
-                        value={newNoteTitle}
-                        onChange={(e) => setNewNoteTitle(e.target.value)}
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-xl text-sm"
-                      />
-                    </div>
-                    <div className="flex items-center gap-2 mb-3">
-                      <textarea
-                        placeholder={t('addCommunityNotePlaceholder')}
-                        value={newNoteSummary}
-                        onChange={(e) => setNewNoteSummary(e.target.value)}
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-xl text-sm resize-none"
-                        rows={2}
-                      />
-                      <button
-                        onClick={handleAddNote}
-                        className="px-4 py-2 bg-purple-600 text-white rounded-xl text-sm font-semibold hover:bg-purple-700 transition"
-                      >
-                        Add
-                      </button>
-                    </div>
+                  <div className="mb-4 rounded-2xl bg-purple-50 border border-purple-200 p-4 text-sm text-purple-900">
+                    {t('communityNotesReadOnly')}
                   </div>
                 )}
 
@@ -1044,50 +1139,11 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
                   ) : (
                     getAccessibleNotes().filter(note => note.patientId === selectedPatientId).map((note) => (
                       <div key={note.id} className="bg-white border-2 border-gray-200 rounded-2xl p-5 mb-4">
-                        {editingNoteId === note.id ? (
-                          <div className="space-y-3">
-                            <input
-                              value={editingTitle}
-                              onChange={(e) => setEditingTitle(e.target.value)}
-                              className="w-full rounded-2xl border border-gray-300 px-4 py-3 text-sm focus:border-purple-500 focus:outline-none"
-                            />
-                            <textarea
-                              value={editingSummary}
-                              onChange={(e) => setEditingSummary(e.target.value)}
-                              className="w-full min-h-[120px] rounded-2xl border border-gray-300 px-4 py-3 text-sm focus:border-purple-500 focus:outline-none"
-                            />
-                            <div className="flex flex-wrap gap-3">
-                              <button
-                                onClick={handleSaveNote}
-                                className="rounded-2xl bg-purple-600 px-4 py-2 text-sm font-semibold text-white hover:bg-purple-700 transition"
-                              >
-                                Save
-                              </button>
-                              <button
-                                onClick={handleCancelNoteEdit}
-                                className="rounded-2xl border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100 transition"
-                              >
-                                {t('cancel')}
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <>
-                            <div className="flex items-center justify-between mb-3">
-                              <h3 className="text-lg font-bold text-gray-800">{dt(note.title)}</h3>
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs text-gray-500">{dt(note.time)}</span>
-                                <button
-                                  onClick={() => handleEditNote(note)}
-                                  className="text-xs text-purple-600 hover:text-purple-800"
-                                >
-                                  {t('edit')}
-                                </button>
-                              </div>
-                            </div>
-                            <p className="text-gray-700 mb-4">{dt(note.summary)}</p>
-                          </>
-                        )}
+                        <div className="flex items-center justify-between gap-3 mb-3">
+                          <h3 className="text-lg font-bold text-gray-800">{dt(note.title)}</h3>
+                          <span className="text-xs text-gray-500">{dt(note.time)}</span>
+                        </div>
+                        <p className="text-gray-700 mb-4">{dt(note.summary)}</p>
                       </div>
                     ))
                   )
@@ -1162,6 +1218,32 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
                       );
                     }
 
+                    if (alertItem.type === 'lost_patient') {
+                      const { alert } = alertItem;
+
+                      return (
+                        <div key={alertItem.id} className="rounded-2xl bg-red-50 border border-red-200 p-4 text-sm">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="font-semibold text-red-900">{t('lostPatientNearby')}</p>
+                              <p className="text-red-700 text-xs mt-1">{alert.patientName}</p>
+                              <p className="text-red-700 text-xs mt-1">{dt(alert.address)}</p>
+                              {alert.distanceLabel && (
+                                <p className="text-red-700 text-xs mt-1">{dt(alert.distanceLabel)}</p>
+                              )}
+                            </div>
+                            <MapPin className="w-5 h-5 text-red-600 shrink-0" />
+                          </div>
+                          <button
+                            onClick={() => openLostAlertMap(alert)}
+                            className="mt-3 w-full bg-red-600 text-white py-2 rounded-lg text-xs font-semibold hover:bg-red-700 transition"
+                          >
+                            {t('checkLocation')}
+                          </button>
+                        </div>
+                      );
+                    }
+
                     return (
                       <div key={alertItem.id} className="rounded-2xl bg-green-50 border border-green-200 p-4 text-sm">
                         <div className="flex items-center gap-3">
@@ -1208,7 +1290,7 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
           }`}
         >
           <FileText className="w-6 h-6" />
-          <span className="text-xs font-semibold">{t('patientNotes')}</span>
+          <span className="text-xs font-semibold">{t('communityNotes')}</span>
         </button>
         <button
           onClick={() => setActiveView('notifications')}

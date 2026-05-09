@@ -1,9 +1,10 @@
 import { useContext, useState } from 'react';
-import { X, Plus, Users, Calendar, Clock } from 'lucide-react';
+import { X, Plus, Users, Calendar, Clock, Mic } from 'lucide-react';
 import { supabaseFunctionsApiBase } from '../../../utils/supabase/api';
 import { LanguageContext } from '../App';
 import { getTranslation } from '../utils/translations';
 import { useDynamicTranslations } from '../utils/dynamicTranslations';
+import { recordSpeechToText } from '../utils/voice';
 
 const DURATION_OPTIONS = [
   { value: '1', label: '1 hour' },
@@ -21,7 +22,8 @@ export function CommunitySupportScheduler({ userId, accessToken, onClose, onSess
   const [duration, setDuration] = useState('2');
   const [tasks, setTasks] = useState('');
   const [creating, setCreating] = useState(false);
-  const { language } = useContext(LanguageContext);
+  const [isRecordingTasks, setIsRecordingTasks] = useState(false);
+  const { language, accessibilitySettings } = useContext(LanguageContext);
   const t = (key: string, vars?: Record<string, string | number>) =>
     getTranslation(language, key, vars);
   const dt = useDynamicTranslations(
@@ -71,6 +73,29 @@ export function CommunitySupportScheduler({ userId, accessToken, onClose, onSess
       alert(t('alertFailedCommunitySupport'));
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function handleDictateTasks() {
+    if (!accessibilitySettings.speechToText) {
+      alert(t('alertSpeechToTextOff'));
+      return;
+    }
+
+    setIsRecordingTasks(true);
+    try {
+      alert(t('alertVoiceRecordingStartedShort'));
+      const transcript = await recordSpeechToText(language, accessToken);
+      if (transcript) {
+        setTasks((current) => current ? `${current} ${transcript}` : transcript);
+      } else {
+        alert(t('alertTranscribeFailed'));
+      }
+    } catch (error) {
+      console.log('Community support dictation error:', error);
+      alert(t('alertMicrophoneUnavailable'));
+    } finally {
+      setIsRecordingTasks(false);
     }
   }
 
@@ -149,13 +174,26 @@ export function CommunitySupportScheduler({ userId, accessToken, onClose, onSess
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 {t('tasksInstructions')}
               </label>
-              <textarea
-                value={tasks}
-                onChange={(e) => setTasks(e.target.value)}
-                placeholder={t('supportRequestPlaceholder')}
-                rows={4}
-                className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
-              />
+              <div className="relative">
+                <textarea
+                  value={tasks}
+                  onChange={(e) => setTasks(e.target.value)}
+                  placeholder={t('supportRequestPlaceholder')}
+                  rows={4}
+                  className="w-full px-4 py-3 pr-12 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+                />
+                <button
+                  type="button"
+                  onClick={handleDictateTasks}
+                  disabled={!accessibilitySettings.speechToText}
+                  className={`absolute right-2 top-2 rounded-lg p-2 transition-colors ${
+                    isRecordingTasks ? 'bg-red-100 text-red-600 animate-pulse' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  } disabled:opacity-40 disabled:cursor-not-allowed`}
+                  title={t('tooltipVoiceInput')}
+                >
+                  <Mic className="w-5 h-5" />
+                </button>
+              </div>
             </div>
           </div>
         </div>

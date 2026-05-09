@@ -1,6 +1,9 @@
 import { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Settings, CheckCircle, Clock, RefreshCw, Plus, Bell, Users, Activity, MessageSquare, MapPin, Home, HelpCircle, LayoutGrid, Video, Image as ImageIcon, Calendar, Mic, Volume2, Phone, Mail, MessageCircle, FileText, ClipboardList, Heart, X } from 'lucide-react';
+import { Settings, CheckCircle, Clock, RefreshCw, Plus, Bell, Users, Activity, MessageSquare, MapPin, Home, HelpCircle, LayoutGrid, Video, Image as ImageIcon, Calendar, Mic, Volume2, Phone, Mail, MessageCircle, FileText, ClipboardList, Heart, X, Thermometer, BookOpen } from 'lucide-react';
+import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import L from 'leaflet';
 import { supabaseFunctionsApiBase } from '../../../utils/supabase/api';
 import { TaskManager } from './TaskManager';
 import { CommunitySupportScheduler } from './CommunitySupportScheduler';
@@ -9,11 +12,33 @@ import { getTranslation } from '../utils/translations';
 import { useDynamicTranslations } from '../utils/dynamicTranslations';
 import { recordSpeechToText, speakText } from '../utils/voice';
 
+const patientMapIcon = L.divIcon({
+  className: '',
+  html: '<div style="width:28px;height:28px;border-radius:9999px;background:#dc2626;border:3px solid white;box-shadow:0 6px 14px rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center;color:white;font-weight:800;font-size:14px;">P</div>',
+  iconSize: [28, 28],
+  iconAnchor: [14, 14]
+});
+
+const homeMapIcon = L.divIcon({
+  className: '',
+  html: '<div style="width:28px;height:28px;border-radius:9999px;background:#2563eb;border:3px solid white;box-shadow:0 6px 14px rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center;color:white;font-weight:800;font-size:14px;">H</div>',
+  iconSize: [28, 28],
+  iconAnchor: [14, 14]
+});
+
+const caregiverMapIcon = L.divIcon({
+  className: '',
+  html: '<div style="width:28px;height:28px;border-radius:9999px;background:#16a34a;border:3px solid white;box-shadow:0 6px 14px rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center;color:white;font-weight:800;font-size:14px;">C</div>',
+  iconSize: [28, 28],
+  iconAnchor: [14, 14]
+});
+
 export function PrimaryCaregiverView({ user, profile, accessToken }) {
   const [tasks, setTasks] = useState([]);
   const [myTasks, setMyTasks] = useState([]);
   const [voiceNotes, setVoiceNotes] = useState([]);
   const [vitals, setVitals] = useState([]);
+  const [caregiverStressScore, setCaregiverStressScore] = useState(null);
   const [showTaskManager, setShowTaskManager] = useState(false);
   const [showMyTaskManager, setShowMyTaskManager] = useState(false);
   const [showCommunitySupportScheduler, setShowCommunitySupportScheduler] = useState(false);
@@ -23,12 +48,16 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
   const [searchingForCaregiver, setSearchingForCaregiver] = useState(false);
   const [showLocationMap, setShowLocationMap] = useState(false);
   const [patientLocation, setPatientLocation] = useState(null);
-  const [notifications, setNotifications] = useState([
-    { id: 1, type: 'alert', message: 'Patient is out of the house!', location: 'Tampines Mall', coordinates: { lat: 1.3521, lng: 103.9448 }, time: '2 mins ago' },
-    { id: 2, type: 'task', message: 'Medication reminder overdue', time: '15 mins ago' }
-  ]);
+  const [availableCaregivers, setAvailableCaregivers] = useState([]);
+  const [requestLocation, setRequestLocation] = useState(null);
+  const [notifications, setNotifications] = useState([]);
   const [activeView, setActiveView] = useState('home');
   const [isRecordingNote, setIsRecordingNote] = useState(false);
+  const [newCommunityNoteText, setNewCommunityNoteText] = useState('');
+  const [isRecordingNewCommunityNote, setIsRecordingNewCommunityNote] = useState(false);
+  const [editingNoteId, setEditingNoteId] = useState(null);
+  const [editingNoteText, setEditingNoteText] = useState('');
+  const [recordingNoteId, setRecordingNoteId] = useState(null);
   const navigate = useNavigate();
   const { language, accessibilitySettings } = useContext(LanguageContext);
   const t = (key: string, vars?: Record<string, string | number>) =>
@@ -38,7 +67,12 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
     [
       ...tasks.map((task) => task.title),
       ...myTasks.map((task) => task.title),
-      ...visibleNotifications.flatMap((notification) => [notification.message, notification.location, notification.time]),
+      ...visibleNotifications.flatMap((notification) => [
+        notification.message,
+        notification.messageKey ? t(notification.messageKey) : '',
+        notification.location,
+        notification.time
+      ]),
       ...communitySupport.flatMap((session) => [session.duration, session.status, session.tasks]),
       ...voiceNotes.flatMap((note) => [note.summary, note.transcription]),
       immediateHelpRequest?.location,
@@ -74,9 +108,94 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
     if (user?.id && accessToken) {
       loadLinkedPatient();
       loadCommunitySupport();
+      loadCaregiverStressScore();
+      loadNotifications();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (activeView !== 'community' || !user?.id || !accessToken) {
+      return;
+    }
+
+    loadAvailableCaregivers();
+    if (!requestLocation) {
+      getCurrentPosition()
+        .then((position) => {
+          setRequestLocation({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            address: 'Current location'
+          });
+        })
+        .catch(() => {
+          setRequestLocation({
+            latitude: 1.3521,
+            longitude: 103.9448,
+            address: 'Tampines Street 81, Block 123'
+          });
+        });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeView, user?.id, accessToken]);
+
+  function getCurrentPosition() {
+    return new Promise((resolve, reject) => {
+      if (!navigator?.geolocation) {
+        return reject(new Error('Geolocation unsupported'));
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        resolve,
+        reject,
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    });
+  }
+
+  function formatCoordinates(latitude, longitude) {
+    return `${Number(latitude).toFixed(5)}, ${Number(longitude).toFixed(5)}`;
+  }
+
+  function formatGpsTimestamp(timestamp) {
+    if (!timestamp) return '';
+    return new Date(timestamp).toLocaleString();
+  }
+
+  async function fetchPatientGpsLocation(patientIdToLoad = patientId) {
+    if (!patientIdToLoad || !accessToken) return null;
+
+    const response = await fetch(
+      `${supabaseFunctionsApiBase}/location/${patientIdToLoad}`,
+      { headers: { 'Authorization': `Bearer ${accessToken}` } }
+    );
+
+    if (!response.ok) return null;
+    const locationData = await response.json();
+    if (!locationData.location?.latitude || !locationData.location?.longitude) return null;
+    return locationData.location;
+  }
+
+  async function loadAvailableCaregivers() {
+    if (!accessToken) {
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `${supabaseFunctionsApiBase}/caregivers/available`,
+        { headers: { 'Authorization': `Bearer ${accessToken}` } }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        setAvailableCaregivers(data.caregivers || []);
+      }
+    } catch (error) {
+      console.log('Error loading available caregivers:', error);
+    }
+  }
 
   async function loadLinkedPatient() {
     try {
@@ -141,11 +260,45 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
     ]);
   }
 
+  async function loadCaregiverStressScore() {
+    try {
+      const response = await fetch(
+        `${supabaseFunctionsApiBase}/caregiver/${user.id}/latest-score`,
+        { headers: { 'Authorization': `Bearer ${accessToken}` } }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        setCaregiverStressScore(typeof data.score === 'number' ? data.score : null);
+      }
+    } catch (error) {
+      console.log('Error loading caregiver stress score:', error);
+    }
+  }
+
+  async function loadNotifications() {
+    try {
+      const response = await fetch(
+        `${supabaseFunctionsApiBase}/notifications`,
+        { headers: { 'Authorization': `Bearer ${accessToken}` } }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        setNotifications(data.notifications || []);
+      }
+    } catch (error) {
+      console.log('Error loading notifications:', error);
+    }
+  }
+
   async function handleRefresh() {
     if (patientId) {
       await loadPatientData(patientId);
     }
+    await loadNotifications();
     await loadCommunitySupport();
+    await loadCaregiverStressScore();
   }
 
   async function handleVoiceNote() {
@@ -209,69 +362,285 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
     await speakText(text, language, accessToken);
   }
 
-  function handleDismissNotification(notificationId) {
-    setNotifications(notifications.filter(n => n.id !== notificationId));
+  function getNoteText(note) {
+    return note.summary || note.transcription || '';
   }
 
-  async function handleReadWholePage() {
-    if (!accessibilitySettings.textToSpeech) {
-      alert(t('alertTextToSpeechOff'));
+  async function createCommunityNote(text) {
+    if (!patientId) {
+      alert(t('alertNoLinkedPatient'));
+      return null;
+    }
+
+    const response = await fetch(
+      `${supabaseFunctionsApiBase}/voice-notes`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({
+          patientId,
+          transcription: text,
+          summary: text
+        })
+      }
+    );
+
+    if (!response.ok) throw new Error('Failed to create community note.');
+    await loadPatientData(patientId);
+    return true;
+  }
+
+  async function handleSaveNewCommunityNote() {
+    if (!newCommunityNoteText.trim()) {
+      alert(t('alertNeedTitleAndContent'));
       return;
     }
 
-    let pageContent = `${t('speechPageIntro', { name: profile.name })} `;
-
-    if (activeView === 'home') {
-      if (myTasks.length > 0) {
-        pageContent += t('speechSectionMyTasks');
-        myTasks.forEach((task) => {
-          pageContent += ` ${dt(task.title)} ${t('at')} ${task.time || dt('no time set')}. `;
-        });
-      }
-
-      if (tasks.length > 0) {
-        pageContent += t('speechSectionPatientTasks');
-        tasks.forEach((task) => {
-          pageContent += ` ${dt(task.title)} ${t('at')} ${task.time || dt('no time set')}. `;
-        });
-      }
-
-      if (communitySupport.length > 0) {
-        pageContent += t('speechSectionScheduledSupport');
-        communitySupport.forEach((session) => {
-          pageContent += ` ${session.caregiverName || ''} ${session.date} ${t('at')} ${session.time} ${dt(session.duration)}. ${dt('Status')}: ${dt(session.status)}. `;
-        });
-      }
-    } else if (activeView === 'notifications') {
-      pageContent += `${t('notifications')} `;
-      visibleNotifications.forEach((notif) => {
-        pageContent += `${dt(notif.message)}. ${dt(notif.time)}. `;
-      });
+    try {
+      await createCommunityNote(newCommunityNoteText.trim());
+      setNewCommunityNoteText('');
+      alert(t('alertCommunityNoteUpdated'));
+    } catch (error) {
+      console.log('Community note create error:', error);
+      alert(t('alertFailedUpdateNote'));
     }
-    
-    await speakText(pageContent, language, accessToken);
   }
 
-  function handleRequestImmediateHelp() {
+  async function handleRecordNewCommunityNote() {
+    if (!accessibilitySettings.speechToText) {
+      alert(t('alertSpeechToTextOff'));
+      return;
+    }
+
+    setIsRecordingNewCommunityNote(true);
+    try {
+      alert(t('alertVoiceRecordingStarted'));
+      const transcript = await recordSpeechToText(language, accessToken);
+      if (!transcript) {
+        alert(t('alertTranscribeFailed'));
+        return;
+      }
+      setNewCommunityNoteText(transcript);
+    } catch (error) {
+      console.log('Community note recording error:', error);
+      alert(t('alertMicrophoneUnavailable'));
+    } finally {
+      setIsRecordingNewCommunityNote(false);
+    }
+  }
+
+  function handleEditCommunityNote(note) {
+    setEditingNoteId(note.id);
+    setEditingNoteText(getNoteText(note));
+  }
+
+  function handleCancelCommunityNoteEdit() {
+    setEditingNoteId(null);
+    setEditingNoteText('');
+  }
+
+  async function updateCommunityNote(noteId, text) {
+    const response = await fetch(
+      `${supabaseFunctionsApiBase}/voice-notes/${noteId}`,
+      {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({
+          transcription: text,
+          summary: text
+        })
+      }
+    );
+
+    if (!response.ok) throw new Error('Failed to update community note.');
+    const data = await response.json();
+    setVoiceNotes((current) => current.map((note) => note.id === noteId ? data.note : note));
+    return data.note;
+  }
+
+  async function handleSaveCommunityNote(noteId) {
+    if (!editingNoteText.trim()) {
+      alert(t('alertNeedTitleAndContent'));
+      return;
+    }
+
+    try {
+      await updateCommunityNote(noteId, editingNoteText.trim());
+      setEditingNoteId(null);
+      setEditingNoteText('');
+    } catch (error) {
+      console.log('Community note update error:', error);
+      alert(t('alertFailedUpdateNote'));
+    }
+  }
+
+  async function handleRerecordCommunityNote(noteId) {
+    if (!accessibilitySettings.speechToText) {
+      alert(t('alertSpeechToTextOff'));
+      return;
+    }
+
+    setRecordingNoteId(noteId);
+    try {
+      alert(t('alertVoiceRecordingStarted'));
+      const transcript = await recordSpeechToText(language, accessToken);
+      if (!transcript) {
+        alert(t('alertTranscribeFailed'));
+        return;
+      }
+
+      await updateCommunityNote(noteId, transcript);
+      if (editingNoteId === noteId) {
+        setEditingNoteText(transcript);
+      }
+      alert(t('alertCommunityNoteUpdated'));
+    } catch (error) {
+      console.log('Community note rerecord error:', error);
+      alert(t('alertMicrophoneUnavailable'));
+    } finally {
+      setRecordingNoteId(null);
+    }
+  }
+
+  function getHelpPageText() {
+    return [
+      t('help'),
+      t('helpListenTitle'),
+      t('helpListenBody'),
+      t('helpLanguageSupport'),
+      t('helpVoiceTitle'),
+      t('helpVoiceBody'),
+      t('helpTasksTitle'),
+      t('helpTasksBody'),
+      t('taskGuideVideoBullet'),
+      t('taskGuideImageBullet'),
+      t('taskGuideReminderBullet'),
+      t('requestHelpNow'),
+      t('helpImmediateBody'),
+      t('helpImmediateBullet1'),
+      t('helpImmediateBullet2'),
+      t('helpImmediateBullet3'),
+      t('scheduledSupport'),
+      t('helpScheduledBody'),
+      t('vitals'),
+      t('helpVitalsBody'),
+      t('notifications'),
+      t('helpNotificationsBody'),
+      t('settings'),
+      t('helpSettingsBody'),
+      t('helpSettingsBullet1'),
+      t('helpSettingsBullet2'),
+      t('helpSettingsBullet3'),
+      t('helpSettingsBullet4'),
+      t('needMoreHelp'),
+      t('supportTeamAlwaysHere')
+    ].join(' ');
+  }
+
+  async function handleDismissNotification(notificationId) {
+    setNotifications(notifications.filter(n => n.id !== notificationId));
+
+    try {
+      await fetch(
+        `${supabaseFunctionsApiBase}/notifications/${notificationId}/dismiss`,
+        {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${accessToken}` }
+        }
+      );
+    } catch (error) {
+      console.log('Error dismissing notification:', error);
+    }
+  }
+
+  async function handleRequestImmediateHelp() {
     setSearchingForCaregiver(true);
     setImmediateHelpRequest({
       id: Date.now(),
       requestedAt: new Date().toISOString(),
-      location: 'Tampines Street 81, Block 123',
+      location: requestLocation?.address || 'Tampines Street 81, Block 123',
       status: 'searching'
     });
 
-    // Simulate searching for caregivers
-    setTimeout(() => {
+    let location = requestLocation;
+    if (!location) {
+      try {
+        const position = await getCurrentPosition();
+        location = {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          address: 'Current location'
+        };
+        setRequestLocation(location);
+      } catch (error) {
+        location = {
+          latitude: 1.3521,
+          longitude: 103.9448,
+          address: 'Tampines Street 81, Block 123'
+        };
+        setRequestLocation(location);
+      }
+    }
+
+    try {
+      const response = await fetch(
+        `${supabaseFunctionsApiBase}/match-help`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${accessToken}`
+          },
+          body: JSON.stringify({
+            latitude: location.latitude,
+            longitude: location.longitude,
+            address: location.address
+          })
+        }
+      );
+
+      const data = await response.json();
+      if (response.ok && data?.status === 'matched') {
+        const matched = data.request;
+        const distanceKm = Number(matched.distanceKm ?? 0);
+        setImmediateHelpRequest({
+          id: matched.id,
+          requestedAt: matched.requestedAt,
+          location: matched.patientLocation.address,
+          status: 'found',
+          caregiverName: matched.caregiverName,
+          caregiverDistance: `${distanceKm.toFixed(1)} km away`,
+          estimatedArrival: `${Math.max(5, Math.round(distanceKm * 4))} mins`,
+          caregiverPhone: matched.caregiverPhone,
+          caregiverLatitude: matched.caregiverLocation.latitude,
+          caregiverLongitude: matched.caregiverLocation.longitude,
+          patientLatitude: matched.patientLocation.latitude,
+          patientLongitude: matched.patientLocation.longitude
+        });
+      } else {
+        setImmediateHelpRequest(prev => ({
+          ...prev,
+          status: 'not_found',
+          failureReason: data?.error || 'No available caregivers found'
+        }));
+      }
+    } catch (error) {
+      console.log('Error requesting help:', error);
       setImmediateHelpRequest(prev => ({
         ...prev,
-        status: 'found',
-        caregiverName: 'Maria Wong',
-        caregiverDistance: '1.2 km away',
-        estimatedArrival: '8 mins'
+        status: 'failed',
+        failureReason: 'Unable to contact the matching service'
       }));
+    } finally {
+      await loadAvailableCaregivers();
       setSearchingForCaregiver(false);
-    }, 3000);
+    }
   }
 
   function handleCancelRequest() {
@@ -279,18 +648,61 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
     setSearchingForCaregiver(false);
   }
 
-  function handleCheckLocation(notification) {
-    setPatientLocation({
-      name: notification.location,
-      coordinates: notification.coordinates,
-      timestamp: notification.time
-    });
-    setShowLocationMap(true);
+  function handleCallCaregiver() {
+    if (!immediateHelpRequest?.caregiverPhone) {
+      return;
+    }
+
+    const tel = immediateHelpRequest.caregiverPhone.replace(/[^+0-9]/g, '');
+    window.location.href = `tel:${tel}`;
+  }
+
+  async function handleCheckLocation(notification) {
+    if (!patientId) {
+      alert(t('alertNoLinkedPatient'));
+      return;
+    }
+
+    try {
+      const location = await fetchPatientGpsLocation(patientId);
+      if (location) {
+        setPatientLocation({
+          name: location.address || formatCoordinates(location.latitude, location.longitude),
+          coordinates: {
+            lat: location.latitude,
+            lng: location.longitude
+          },
+          timestamp: formatGpsTimestamp(location.updatedAt)
+        });
+        setShowLocationMap(true);
+        return;
+      }
+    } catch (error) {
+      console.log('Error fetching patient location:', error);
+    }
+
+    if (notification?.coordinates?.lat && notification?.coordinates?.lng) {
+      setPatientLocation({
+        name: notification.location || formatCoordinates(notification.coordinates.lat, notification.coordinates.lng),
+        coordinates: notification.coordinates,
+        timestamp: notification.time ? formatGpsTimestamp(notification.time) : ''
+      });
+      setShowLocationMap(true);
+      return;
+    }
+
+    alert(t('alertNoPatientLocation'));
   }
 
   function handleCloseLocationMap() {
     setShowLocationMap(false);
     setPatientLocation(null);
+  }
+
+  function handleNavigateToPatientLocation() {
+    if (!patientLocation?.coordinates) return;
+    const { lat, lng } = patientLocation.coordinates;
+    window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`, '_blank', 'noopener,noreferrer');
   }
 
   function normalizeName(name = '') {
@@ -313,6 +725,57 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
     return session.status === 'accepted' && session.caregiverName && !isAssignedToPrimaryCaregiver(session);
   }
 
+  function getCaregiverStressLevel(score) {
+    if (score === null || score === undefined) {
+      return {
+        levelKey: 'assessmentNotCompleted',
+        messageKey: 'assessmentNotCompletedMsg',
+        band: 'none',
+        colorClass: 'text-gray-700',
+        bgClass: 'bg-gray-100',
+        borderClass: 'border-gray-200',
+        markerPercent: 0
+      };
+    }
+
+    if (score <= 10) {
+      return {
+        levelKey: 'burdenLowTitle',
+        messageKey: 'burdenLowMsg',
+        band: 'green',
+        label: 'Green',
+        colorClass: 'text-green-700',
+        bgClass: 'bg-green-50',
+        borderClass: 'border-green-200',
+        markerPercent: Math.min(100, Math.max(0, (score / 48) * 100))
+      };
+    }
+
+    if (score <= 20) {
+      return {
+        levelKey: 'burdenMidTitle',
+        messageKey: 'burdenMidMsg',
+        band: 'orange',
+        label: 'Orange',
+        colorClass: 'text-orange-700',
+        bgClass: 'bg-orange-50',
+        borderClass: 'border-orange-200',
+        markerPercent: Math.min(100, Math.max(0, (score / 48) * 100))
+      };
+    }
+
+    return {
+      levelKey: 'burdenHighTitle',
+      messageKey: 'burdenHighMsg',
+      band: 'red',
+      label: 'Red',
+      colorClass: 'text-red-700',
+      bgClass: 'bg-red-50',
+      borderClass: 'border-red-200',
+      markerPercent: Math.min(100, Math.max(0, (score / 48) * 100))
+    };
+  }
+
   return (
     <div className="size-full bg-white flex flex-col">
       {/* Top Bar */}
@@ -322,14 +785,6 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
           <h1 className="text-xl font-bold">{t('brandName')}</h1>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            onClick={handleReadWholePage}
-            disabled={!accessibilitySettings.textToSpeech}
-            className="p-2 hover:bg-white/20 rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            title={t('tooltipReadWholePage')}
-          >
-            <Volume2 className="w-6 h-6" />
-          </button>
           <button
             onClick={() => setActiveView('notifications')}
             className="relative p-2 hover:bg-white/20 rounded-full transition-colors"
@@ -381,9 +836,49 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                 style={{ borderColor: '#4A9EFF' }}
               >
                 <MessageSquare className="w-12 h-12" style={{ color: '#4A9EFF' }} />
-                <span className="text-sm font-semibold text-gray-800 text-center">{t('patientNotes')}</span>
+                <span className="text-sm font-semibold text-gray-800 text-center">{t('communityNotes')}</span>
               </button>
             </div>
+
+            {(() => {
+              const stressLevel = getCaregiverStressLevel(caregiverStressScore);
+              return (
+                <div className="mb-6 rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <Thermometer className={`h-5 w-5 ${stressLevel.colorClass}`} />
+                      <span className="truncate text-sm font-bold text-gray-800">{t('caregiverStressThermometer')}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold ${stressLevel.colorClass} ${stressLevel.bgClass}`}>
+                        {stressLevel.label}
+                      </span>
+                      <span className="shrink-0 rounded-full px-3 py-1 text-xs font-semibold text-gray-700 bg-gray-100 border border-gray-200">
+                        {caregiverStressScore === null || caregiverStressScore === undefined
+                          ? t('assessmentPendingShort')
+                          : t('assessmentScoreOutOf', { score: caregiverStressScore, total: 48 })}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="relative h-3 overflow-hidden rounded-full bg-gray-100">
+                    <div className="absolute inset-y-0 left-0 w-[23%] bg-green-500" />
+                    <div className="absolute inset-y-0 left-[23%] w-[19%] bg-yellow-400" />
+                    <div className="absolute inset-y-0 left-[42%] right-0 bg-red-500" />
+                    {caregiverStressScore !== null && caregiverStressScore !== undefined && (
+                      <div
+                        className="absolute top-1/2 h-6 w-1.5 -translate-y-1/2 rounded-full bg-gray-900 shadow"
+                        style={{ left: `calc(${stressLevel.markerPercent}% - 3px)` }}
+                      />
+                    )}
+                  </div>
+                  <div className="mt-2 flex justify-between text-[11px] font-semibold text-gray-500">
+                    <span>{t('burdenLowTitle')}</span>
+                    <span>{t('burdenMidTitle')}</span>
+                    <span>{t('burdenHighTitle')}</span>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* My Tasks Section */}
             <div className="bg-white rounded-2xl border-2 overflow-hidden mb-4" style={{ borderColor: '#4A9EFF' }}>
@@ -629,6 +1124,20 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                             <p className="text-sm text-gray-600 ml-8">📋 {dt(session.tasks)}</p>
                           )}
                         </div>
+                        <button
+                          onClick={() => handleTextToSpeech([
+                            t('scheduledSupport'),
+                            hasAssignedVolunteer(session) ? `${dt('Volunteer assigned')}: ${session.caregiverName}` : dt('Awaiting volunteer'),
+                            `${session.date} ${t('at')} ${session.time}`,
+                            `${t('duration')}: ${dt(session.duration)}`,
+                            session.tasks ? dt(session.tasks) : ''
+                          ].filter(Boolean).join('. '))}
+                          disabled={!accessibilitySettings.textToSpeech}
+                          className="ml-3 rounded-xl bg-purple-50 p-2 text-purple-600 hover:bg-purple-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                          title={t('tooltipReadAloud')}
+                        >
+                          <Volume2 className="w-5 h-5" />
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -654,21 +1163,26 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
               <p className="text-gray-500 text-center py-8">{t('noNotifications')}</p>
             ) : (
               <div className="space-y-3">
-                {visibleNotifications.map((notification) => (
+                {visibleNotifications.map((notification) => {
+                  const notificationMessage = notification.messageKey
+                    ? t(notification.messageKey)
+                    : dt(notification.message);
+
+                  return (
                   <div
                     key={notification.id}
                     className="bg-red-50 border-2 border-red-300 rounded-2xl p-4"
                   >
                     <div className="flex items-start gap-3">
                       <button
-                        onClick={() => handleTextToSpeech(dt(notification.message))}
+                        onClick={() => handleTextToSpeech(notificationMessage)}
                         className="p-2 hover:bg-red-100 rounded-lg transition-colors flex-shrink-0"
                         title={t('readAloud')}
                       >
                         <Volume2 className="w-5 h-5 text-red-600" />
                       </button>
                       <div className="flex-1">
-                        <p className="font-bold text-red-900 text-lg mb-2">{dt(notification.message)}</p>
+                        <p className="font-bold text-red-900 text-lg mb-2">{notificationMessage}</p>
                         {notification.location && (
                           <button
                             onClick={() => handleCheckLocation(notification)}
@@ -689,7 +1203,8 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                       </button>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -709,19 +1224,50 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                 <h2 className="text-2xl font-bold text-gray-800 mb-4">{t('communitySupport')}</h2>
                 <p className="text-gray-600 mb-6">{t('helpImmediateIntro')}</p>
                 
-                {/* Grab-style Map Placeholder */}
                 <div className="bg-gray-100 rounded-2xl overflow-hidden mb-6 relative" style={{ height: '400px' }}>
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="text-center">
-                      <MapPin className="w-16 h-16 text-gray-400 mx-auto mb-2" />
-                      <p className="text-gray-500">{t('mapShowsLocation')}<br />{t('mapShowsCaregivers')}</p>
+                  {requestLocation ? (
+                    <MapContainer
+                      center={[requestLocation.latitude, requestLocation.longitude]}
+                      zoom={17}
+                      style={{ height: '100%', width: '100%' }}
+                      className="rounded-2xl"
+                    >
+                      <TileLayer
+                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                        maxZoom={19}
+                      />
+                      <Marker position={[requestLocation.latitude, requestLocation.longitude]} icon={homeMapIcon}>
+                        <Popup>
+                          <strong>{t('youAreHome')}</strong><br />
+                          {requestLocation.address}
+                        </Popup>
+                      </Marker>
+                      {availableCaregivers.map((caregiver, index) => (
+                        caregiver.latitude && caregiver.longitude && (
+                          <Marker
+                            key={`caregiver-${index}`}
+                            position={[caregiver.latitude, caregiver.longitude]}
+                            icon={caregiverMapIcon}
+                          >
+                            <Popup>
+                              <strong>{caregiver.name || t('communityCaregiver')}</strong><br />
+                              {t('myAvailability')}
+                            </Popup>
+                          </Marker>
+                        )
+                      ))}
+                    </MapContainer>
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="text-center">
+                        <MapPin className="w-16 h-16 text-gray-400 mx-auto mb-2" />
+                        <p className="text-gray-500">{t('mapShowsLocation')}<br />{t('mapShowsCaregivers')}</p>
+                      </div>
                     </div>
-                  </div>
-                  {/* Simulated map pin for current location */}
-                  <div className="absolute" style={{ top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}>
-                    <div className="w-12 h-12 bg-purple-600 rounded-full flex items-center justify-center shadow-lg animate-pulse">
-                      <MapPin className="w-8 h-8 text-white" />
-                    </div>
+                  )}
+                  <div className="absolute bottom-4 left-4 bg-white/90 rounded-2xl px-4 py-3 shadow-lg text-sm text-gray-700 z-[1000]">
+                    {t('mapShowsLocation')}<br />{t('mapShowsCaregivers')}
                   </div>
                 </div>
 
@@ -741,34 +1287,80 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
             ) : (
               <div className="flex-1 flex flex-col">
                 {/* Map View with Request */}
-                <div className="flex-1 bg-gray-100 relative">
-                  {/* Map Placeholder */}
-                  <div className="absolute inset-0">
-                    <div className="size-full bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center">
+                <div className="flex-1 relative">
+                  {requestLocation ? (
+                    <MapContainer
+                      center={[
+                        immediateHelpRequest.patientLatitude || requestLocation.latitude,
+                        immediateHelpRequest.patientLongitude || requestLocation.longitude
+                      ]}
+                      zoom={17}
+                      style={{ height: '100%', width: '100%' }}
+                    >
+                      <TileLayer
+                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                        maxZoom={19}
+                      />
+                      <Marker
+                        position={[
+                          immediateHelpRequest.patientLatitude || requestLocation.latitude,
+                          immediateHelpRequest.patientLongitude || requestLocation.longitude
+                        ]}
+                        icon={patientMapIcon}
+                      >
+                        <Popup>
+                          <strong>{t('patientLocation')}</strong><br />
+                          {immediateHelpRequest.location || requestLocation.address}
+                        </Popup>
+                      </Marker>
+                      {immediateHelpRequest.status === 'found' && immediateHelpRequest.caregiverLatitude && immediateHelpRequest.caregiverLongitude && (
+                        <>
+                          <Marker
+                            position={[immediateHelpRequest.caregiverLatitude, immediateHelpRequest.caregiverLongitude]}
+                            icon={caregiverMapIcon}
+                          >
+                            <Popup>
+                              <strong>{immediateHelpRequest.caregiverName}</strong><br />
+                              {immediateHelpRequest.caregiverDistance}
+                            </Popup>
+                          </Marker>
+                          <Polyline
+                            positions={[
+                              [
+                                immediateHelpRequest.patientLatitude || requestLocation.latitude,
+                                immediateHelpRequest.patientLongitude || requestLocation.longitude
+                              ],
+                              [immediateHelpRequest.caregiverLatitude, immediateHelpRequest.caregiverLongitude]
+                            ]}
+                            pathOptions={{ color: '#16a34a', weight: 4, opacity: 0.7 }}
+                          />
+                        </>
+                      )}
+                      {immediateHelpRequest.status !== 'found' && availableCaregivers.map((caregiver, index) => (
+                        caregiver.latitude && caregiver.longitude && (
+                          <Marker
+                            key={`caregiver-${index}`}
+                            position={[caregiver.latitude, caregiver.longitude]}
+                            icon={caregiverMapIcon}
+                          >
+                            <Popup>
+                              <strong>{caregiver.name || t('communityCaregiver')}</strong>
+                            </Popup>
+                          </Marker>
+                        )
+                      ))}
+                    </MapContainer>
+                  ) : (
+                    <div className="size-full bg-slate-100 flex items-center justify-center">
                       <MapPin className="w-24 h-24 text-gray-300" />
-                    </div>
-                  </div>
-
-                  {/* Current Location Pin */}
-                  <div className="absolute" style={{ top: '40%', left: '50%', transform: 'translate(-50%, -50%)' }}>
-                    <div className="w-16 h-16 bg-purple-600 rounded-full flex items-center justify-center shadow-lg">
-                      <MapPin className="w-10 h-10 text-white" />
-                    </div>
-                    <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 whitespace-nowrap bg-white px-3 py-1 rounded-full shadow-md text-sm font-semibold">
-                      {dt(immediateHelpRequest.location)}
-                    </div>
-                  </div>
-
-                  {/* Caregiver Pin (when found) */}
-                  {immediateHelpRequest.status === 'found' && (
-                    <div className="absolute" style={{ top: '30%', left: '60%', transform: 'translate(-50%, -50%)' }}>
-                      <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center shadow-lg animate-bounce">
-                        <Users className="w-8 h-8 text-white" />
-                      </div>
                     </div>
                   )}
 
-                  {/* Back Button */}
+                  <div className="absolute bottom-4 left-4 bg-white/90 rounded-2xl px-4 py-3 shadow-lg text-sm text-gray-700 z-[1000]">
+                    {t('mapShowsLocation')}<br />{t('mapShowsCaregivers')}
+                  </div>
+
                   <button
                     onClick={() => setActiveView('home')}
                     className="absolute top-4 left-4 bg-white p-3 rounded-full shadow-lg hover:bg-gray-50"
@@ -792,6 +1384,20 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                         className="w-full bg-gray-100 text-gray-700 py-4 rounded-2xl font-semibold hover:bg-gray-200 transition-colors"
                       >
                         {t('cancelRequest')}
+                      </button>
+                    </div>
+                  ) : immediateHelpRequest.status === 'not_found' || immediateHelpRequest.status === 'failed' ? (
+                    <div className="text-center py-8">
+                      <div className="mb-4">
+                        <Users className="w-12 h-12 text-gray-400 mx-auto" />
+                      </div>
+                      <h3 className="text-xl font-bold text-gray-800 mb-2">No caregiver match found</h3>
+                      <p className="text-gray-600 mb-6">{immediateHelpRequest.failureReason || 'Please try again later or refresh the app.'}</p>
+                      <button
+                        onClick={handleCancelRequest}
+                        className="w-full bg-purple-600 text-white py-4 rounded-2xl font-semibold hover:bg-purple-700 transition-colors"
+                      >
+                        Try again
                       </button>
                     </div>
                   ) : (
@@ -823,6 +1429,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
 
                       <div className="grid grid-cols-2 gap-3">
                         <button
+                          onClick={handleCallCaregiver}
                           className="bg-gray-100 text-gray-700 py-4 rounded-2xl font-semibold hover:bg-gray-200 transition-colors flex items-center justify-center gap-2"
                         >
                           <Phone className="w-5 h-5" />
@@ -885,7 +1492,32 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
             >
               ← {t('backToHome')}
             </button>
-            <h2 className="text-2xl font-bold text-gray-800 mb-4">{t('patientNotes')}</h2>
+            <h2 className="text-2xl font-bold text-gray-800 mb-4">{t('communityNotes')}</h2>
+            <div className="mb-4 rounded-2xl border-2 border-gray-200 bg-white p-4">
+              <textarea
+                value={newCommunityNoteText}
+                onChange={(e) => setNewCommunityNoteText(e.target.value)}
+                placeholder={t('addCommunityNotePlaceholder')}
+                className="min-h-[110px] w-full resize-none rounded-2xl border border-gray-300 px-4 py-3 text-sm text-gray-800 focus:border-blue-500 focus:outline-none"
+              />
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  onClick={handleSaveNewCommunityNote}
+                  className="rounded-xl px-4 py-2 text-sm font-semibold text-white"
+                  style={{ backgroundColor: '#4A9EFF' }}
+                >
+                  {t('save')}
+                </button>
+                <button
+                  onClick={handleRecordNewCommunityNote}
+                  disabled={!accessibilitySettings.speechToText || isRecordingNewCommunityNote}
+                  className="inline-flex items-center gap-2 rounded-xl bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Mic className={`w-4 h-4 ${isRecordingNewCommunityNote ? 'animate-pulse' : ''}`} />
+                  {isRecordingNewCommunityNote ? t('stopRecording') : t('recordNote')}
+                </button>
+              </div>
+            </div>
             {voiceNotes.length === 0 ? (
               <div className="border-2 rounded-2xl p-8 text-center" style={{ backgroundColor: '#E1F0FF', borderColor: '#4A9EFF' }}>
                 <MessageSquare className="w-16 h-16 mx-auto mb-4" style={{ color: '#4A9EFF' }} />
@@ -895,10 +1527,73 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
               <div className="space-y-3">
                 {voiceNotes.map((note) => (
                   <div key={note.id} className="bg-white border-2 border-gray-200 rounded-2xl p-4">
-                    <p className="text-gray-800">{dt(note.summary || note.transcription)}</p>
-                    <p className="text-xs text-gray-500 mt-2">
-                      {new Date(note.createdAt).toLocaleString()}
-                    </p>
+                    {editingNoteId === note.id ? (
+                      <div className="space-y-3">
+                        <textarea
+                          value={editingNoteText}
+                          onChange={(e) => setEditingNoteText(e.target.value)}
+                          className="min-h-[120px] w-full rounded-2xl border border-gray-300 px-4 py-3 text-sm text-gray-800 focus:border-blue-500 focus:outline-none"
+                        />
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={() => handleSaveCommunityNote(note.id)}
+                            className="rounded-xl px-4 py-2 text-sm font-semibold text-white"
+                            style={{ backgroundColor: '#4A9EFF' }}
+                          >
+                            {t('save')}
+                          </button>
+                          <button
+                            onClick={handleCancelCommunityNoteEdit}
+                            className="rounded-xl border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100"
+                          >
+                            {t('cancel')}
+                          </button>
+                          <button
+                            onClick={() => handleRerecordCommunityNote(note.id)}
+                            disabled={!accessibilitySettings.speechToText || recordingNoteId === note.id}
+                            className="inline-flex items-center gap-2 rounded-xl bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <Mic className={`w-4 h-4 ${recordingNoteId === note.id ? 'animate-pulse' : ''}`} />
+                            {recordingNoteId === note.id ? t('stopRecording') : t('rerecordNote')}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="mb-3 flex items-start justify-between gap-3">
+                          <p className="flex-1 text-gray-800">{dt(getNoteText(note))}</p>
+                          <button
+                            onClick={() => handleTextToSpeech(dt(getNoteText(note)))}
+                            disabled={!accessibilitySettings.textToSpeech}
+                            className="rounded-xl bg-blue-50 p-2 text-blue-600 hover:bg-blue-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                            title={t('tooltipReadAloud')}
+                          >
+                            <Volume2 className="w-5 h-5" />
+                          </button>
+                        </div>
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <p className="text-xs text-gray-500">
+                            {new Date(note.updatedAt || note.createdAt).toLocaleString()}
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              onClick={() => handleEditCommunityNote(note)}
+                              className="rounded-xl border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-100"
+                            >
+                              {t('edit')}
+                            </button>
+                            <button
+                              onClick={() => handleRerecordCommunityNote(note.id)}
+                              disabled={!accessibilitySettings.speechToText || recordingNoteId === note.id}
+                              className="inline-flex items-center gap-2 rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              <Mic className={`w-4 h-4 ${recordingNoteId === note.id ? 'animate-pulse' : ''}`} />
+                              {recordingNoteId === note.id ? t('stopRecording') : t('rerecordNote')}
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
                 ))}
               </div>
@@ -915,37 +1610,63 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
             >
               ← {t('backToHome')}
             </button>
-            <h2 className="text-2xl font-bold text-gray-800 mb-6">{t('resourcesSupport')}</h2>
-            
-            {/* Resource Cards Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {/* Contact Us */}
-              <button
-                onClick={() => alert(t('alertContactUs'))}
-                className="bg-white border-2 border-gray-200 rounded-2xl p-6 flex flex-col items-center gap-3 hover:border-blue-400 hover:shadow-lg transition-all active:scale-95"
-              >
-                <Phone className="w-16 h-16 text-blue-600" />
-                <span className="text-base font-semibold text-gray-800 text-center">{t('contactUs')}</span>
-              </button>
 
-              {/* Support */}
-              <button
-                onClick={() => alert(t('alertSupportLinks'))}
-                className="bg-white border-2 border-gray-200 rounded-2xl p-6 flex flex-col items-center gap-3 hover:border-purple-400 hover:shadow-lg transition-all active:scale-95"
-              >
-                <Heart className="w-16 h-16 text-purple-600" />
-                <span className="text-base font-semibold text-gray-800 text-center">{t('support')}</span>
-              </button>
+            <div className="space-y-4">
+              <div className="bg-white border-2 border-gray-200 rounded-2xl p-5">
+                <div className="flex items-center gap-3 mb-4">
+                  <BookOpen className="w-7 h-7 text-purple-600" />
+                  <h3 className="text-lg font-bold text-gray-800">{t('resourcesSupport')}</h3>
+                </div>
+                <p className="text-gray-600 mb-4">{t('resourceQuickLinks')}</p>
+                <ul className="space-y-2 text-sm text-blue-700">
+                  <li>
+                    <a href="https://www.caring.sg/" target="_blank" rel="noreferrer" className="underline">
+                      {dt('Caring SG')}
+                    </a>
+                  </li>
+                  <li>
+                    <a href="https://www.aic.sg/Caregiving-Support/Connecting-with-other-caregivers" target="_blank" rel="noreferrer" className="underline">
+                      {dt('AIC Caregiving Support')}
+                    </a>
+                  </li>
+                  <li>
+                    <a href="https://www.aic.sg/" target="_blank" rel="noreferrer" className="underline">
+                      {dt('AIC Help for Caregivers')}
+                    </a>
+                  </li>
+                </ul>
+              </div>
 
-              {/* Survey */}
-              <button
-                onClick={() => navigate('/assessment')}
-                className="bg-white border-2 border-gray-200 rounded-2xl p-6 flex flex-col items-center gap-3 hover:shadow-lg transition-all active:scale-95"
-                style={{ borderColor: '#4A9EFF' }}
-              >
-                <ClipboardList className="w-16 h-16" style={{ color: '#4A9EFF' }} />
-                <span className="text-base font-semibold text-gray-800 text-center">{t('survey')}</span>
-              </button>
+              <div className="bg-white border-2 border-gray-200 rounded-2xl p-5">
+                <div className="flex items-center gap-3 mb-4">
+                  <Bell className="w-7 h-7 text-purple-600" />
+                  <h3 className="text-lg font-bold text-gray-800">{t('helplineContacts')}</h3>
+                </div>
+                <div className="space-y-3 text-gray-700">
+                  <div className="rounded-xl border border-gray-200 p-4 bg-slate-50">
+                    <p className="font-semibold">{dt('Club Heal')}</p>
+                    <p>6899 3463</p>
+                  </div>
+                  <div className="rounded-xl border border-gray-200 p-4 bg-slate-50">
+                    <p className="font-semibold">{dt('Mindful Community')}</p>
+                    <p>6460 4400</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white border-2 border-gray-200 rounded-2xl p-5">
+                <div className="flex items-center gap-3 mb-4">
+                  <ClipboardList className="w-7 h-7 text-blue-600" />
+                  <h3 className="text-lg font-bold text-gray-800">{t('wellbeingAssessment')}</h3>
+                </div>
+                <p className="text-gray-600 mb-4">{t('supportTeamAlwaysHere')}</p>
+                <button
+                  onClick={() => navigate('/assessment')}
+                  className="w-full bg-blue-600 text-white rounded-xl py-3 text-sm font-semibold hover:bg-blue-700 transition"
+                >
+                  {t('takeAssessment')}
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -959,7 +1680,17 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
             >
               ← {t('backToHome')}
             </button>
-            <h2 className="text-2xl font-bold text-gray-800 mb-6">{t('help')}</h2>
+            <div className="mb-6 flex items-center justify-between gap-3">
+              <h2 className="text-2xl font-bold text-gray-800">{t('help')}</h2>
+              <button
+                onClick={() => handleTextToSpeech(getHelpPageText())}
+                disabled={!accessibilitySettings.textToSpeech}
+                className="rounded-xl bg-blue-50 p-2 text-blue-600 hover:bg-blue-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                title={t('tooltipReadAloud')}
+              >
+                <Volume2 className="w-5 h-5" />
+              </button>
+            </div>
 
             <div className="space-y-4">
               {/* Quick Actions */}
@@ -1159,50 +1890,54 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
       {showLocationMap && patientLocation && (
         <div className="fixed inset-0 bg-black/50 z-50 flex flex-col">
           {/* Map View */}
-          <div className="flex-1 relative bg-gradient-to-br from-blue-100 to-purple-100">
-            {/* Map Placeholder */}
-            <div className="absolute inset-0 flex items-center justify-center">
-              <MapPin className="w-32 h-32 text-gray-300" />
-            </div>
-
-            {/* Patient Location Pin */}
-            <div className="absolute" style={{ top: '45%', left: '50%', transform: 'translate(-50%, -50%)' }}>
-              <div className="w-20 h-20 bg-red-500 rounded-full flex items-center justify-center shadow-2xl animate-pulse">
-                <MapPin className="w-12 h-12 text-white" />
-              </div>
-              <div className="absolute -bottom-10 left-1/2 transform -translate-x-1/2 whitespace-nowrap bg-white px-4 py-2 rounded-xl shadow-lg">
-                <p className="text-sm font-bold text-gray-800">{patientLocation.name}</p>
-              </div>
-            </div>
-
-            {/* Your Location Pin (Home) */}
-            <div className="absolute" style={{ top: '65%', left: '30%', transform: 'translate(-50%, -50%)' }}>
-              <div className="w-12 h-12 rounded-full flex items-center justify-center shadow-lg" style={{ backgroundColor: '#4A9EFF' }}>
-                <Home className="w-8 h-8 text-white" />
-              </div>
-              <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 whitespace-nowrap bg-white px-3 py-1 rounded-full shadow-md text-xs font-semibold">
-                {t('home')}
-              </div>
-            </div>
-
-            {/* Distance Line */}
-            <svg className="absolute inset-0 pointer-events-none" style={{ width: '100%', height: '100%' }}>
-              <line
-                x1="30%"
-                y1="65%"
-                x2="50%"
-                y2="45%"
-                stroke="#4A9EFF"
-                strokeWidth="3"
-                strokeDasharray="10,5"
-                opacity="0.6"
+          <div className="flex-1 relative">
+            <MapContainer
+              center={[patientLocation.coordinates.lat, patientLocation.coordinates.lng]}
+              zoom={17}
+              style={{ height: '100%', width: '100%' }}
+              className="rounded-none"
+            >
+              <TileLayer
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                maxZoom={19}
               />
-            </svg>
+              <Marker
+                position={[patientLocation.coordinates.lat, patientLocation.coordinates.lng]}
+                icon={patientMapIcon}
+              >
+                <Popup>
+                  <strong>{t('patientLocation')}</strong><br />
+                  {patientLocation.name}<br />
+                  <small>{patientLocation.timestamp}</small>
+                </Popup>
+              </Marker>
+              {requestLocation && (
+                <>
+                  <Marker
+                    position={[requestLocation.latitude, requestLocation.longitude]}
+                    icon={homeMapIcon}
+                  >
+                    <Popup>
+                      <strong>{t('youAreHome')}</strong><br />
+                      {requestLocation.address}
+                    </Popup>
+                  </Marker>
+                  <Polyline
+                    positions={[
+                      [requestLocation.latitude, requestLocation.longitude],
+                      [patientLocation.coordinates.lat, patientLocation.coordinates.lng]
+                    ]}
+                    pathOptions={{ color: '#dc2626', weight: 4, opacity: 0.7 }}
+                  />
+                </>
+              )}
+            </MapContainer>
 
             {/* Close Button */}
             <button
               onClick={handleCloseLocationMap}
-              className="absolute top-4 left-4 bg-white p-3 rounded-full shadow-lg hover:bg-gray-50 transition-colors"
+              className="absolute top-4 left-4 bg-white/90 backdrop-blur-sm p-3 rounded-full shadow-lg hover:bg-white transition-colors z-[1000]"
             >
               <X className="w-6 h-6 text-gray-700" />
             </button>
@@ -1215,26 +1950,16 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                 <MapPin className="w-8 h-8 text-red-600" />
               </div>
               <div className="flex-1">
-                <h3 className="text-xl font-bold text-gray-800 mb-1">Patient Location</h3>
+                <h3 className="text-xl font-bold text-gray-800 mb-1">{t('patientLocation')}</h3>
                 <p className="text-gray-700 font-semibold text-lg mb-2">{patientLocation.name}</p>
                 <p className="text-sm text-gray-500">{patientLocation.timestamp}</p>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div>
               <button
-                onClick={() => alert(t('alertCallingPatient'))}
-                className="py-4 rounded-2xl font-semibold transition-colors flex items-center justify-center gap-2 text-white"
-                style={{ backgroundColor: '#4A9EFF' }}
-              >
-                <Phone className="w-5 h-5" />
-                {t('callPatient')}
-              </button>
-              <button
-                onClick={() =>
-                  alert(t('alertOpeningNavigation', { place: patientLocation.name || '' }))
-                }
-                className="bg-purple-600 text-white py-4 rounded-2xl font-semibold hover:bg-purple-700 transition-colors flex items-center justify-center gap-2"
+                onClick={handleNavigateToPatientLocation}
+                className="w-full bg-purple-600 text-white py-4 rounded-2xl font-semibold hover:bg-purple-700 transition-colors flex items-center justify-center gap-2"
               >
                 <MapPin className="w-5 h-5" />
                 {t('navigate')}
