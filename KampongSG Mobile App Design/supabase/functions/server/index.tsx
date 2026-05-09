@@ -34,6 +34,72 @@ async function getAuthenticatedUser(authHeader: string | null) {
   return user;
 }
 
+const SEA_LION_MODEL = Deno.env.get('CLOUDFLARE_SEA_LION_MODEL') || '@cf/aisingapore/gemma-sea-lion-v4-27b-it';
+const STT_MODEL = Deno.env.get('CLOUDFLARE_STT_MODEL') || '@cf/openai/whisper';
+const TTS_MODEL = Deno.env.get('CLOUDFLARE_TTS_MODEL') || '@cf/myshell-ai/melotts';
+const ttsLanguageMap: Record<string, string> = {
+  'en-sg': 'en',
+  'zh-sg': 'zh',
+  'zh-min': 'zh',
+  'zh-yue': 'zh',
+  'ms-sg': 'ms',
+  'ta-sg': 'ta'
+};
+
+function getCloudflareAiConfig() {
+  const accountId = Deno.env.get('CLOUDFLARE_ACCOUNT_ID');
+  const apiToken = Deno.env.get('CLOUDFLARE_API_TOKEN') || Deno.env.get('CLOUDFLARE_AUTH_TOKEN');
+  if (!accountId || !apiToken) return null;
+  return { accountId, apiToken };
+}
+
+async function runCloudflareAi(model: string, body: BodyInit, contentType: string) {
+  const config = getCloudflareAiConfig();
+  if (!config) {
+    throw new Error('Cloudflare Workers AI is not configured');
+  }
+
+  return fetch(`https://api.cloudflare.com/client/v4/accounts/${config.accountId}/ai/run/${model}`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${config.apiToken}`,
+      'Content-Type': contentType
+    },
+    body
+  });
+}
+
+function textFromWorkersAiResult(payload: any) {
+  const result = payload?.result ?? payload;
+  return result?.response
+    || result?.text
+    || result?.generated_text
+    || result?.transcription
+    || result?.choices?.[0]?.message?.content
+    || result?.choices?.[0]?.text
+    || '';
+}
+
+function base64ToBytes(base64: string) {
+  const cleanBase64 = base64.includes(',') ? base64.split(',').pop()! : base64;
+  const binary = atob(cleanBase64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+function bytesToBase64(buffer: ArrayBuffer) {
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
 app.get("/make-server-fd25410b/health", (c) => {
   return c.json({ status: "ok" });
 });
@@ -275,6 +341,119 @@ app.get("/make-server-fd25410b/caregiver/:caregiverId/availability", async (c) =
   return c.json({ availability });
 });
 
+app.post("/make-server-fd25410b/ai/sea-lion", async (c) => {
+  const user = await getAuthenticatedUser(c.req.header('Authorization'));
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+  try {
+    const { prompt, messages, language = 'en-sg', system } = await c.req.json();
+    const requestMessages = Array.isArray(messages)
+      ? messages
+      : [
+          {
+            role: 'system',
+            content: system || `You are a Singapore care assistant. Reply in the user's selected language code: ${language}.`
+          },
+          { role: 'user', content: prompt || '' }
+        ];
+
+    const response = await runCloudflareAi(
+      SEA_LION_MODEL,
+      JSON.stringify({ messages: requestMessages }),
+      'application/json'
+    );
+    const data = await response.json();
+
+    if (!response.ok || data?.success === false) {
+      return c.json({ error: data?.errors?.[0]?.message || 'SEA-LION request failed' }, 502);
+    }
+
+    return c.json({
+      text: textFromWorkersAiResult(data),
+      model: SEA_LION_MODEL,
+      provider: 'cloudflare-workers-ai'
+    });
+  } catch (error) {
+    console.log(`SEA-LION error: ${error}`);
+    return c.json({ error: String(error) }, 500);
+  }
+});
+
+app.post("/make-server-fd25410b/ai/stt", async (c) => {
+  const user = await getAuthenticatedUser(c.req.header('Authorization'));
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+  try {
+    const { audioBase64, mimeType = 'audio/webm', language = 'en-sg' } = await c.req.json();
+    if (!audioBase64) return c.json({ error: "Missing audioBase64" }, 400);
+
+    const response = await runCloudflareAi(STT_MODEL, base64ToBytes(audioBase64), mimeType);
+    const data = await response.json();
+
+    if (!response.ok || data?.success === false) {
+      return c.json({ error: data?.errors?.[0]?.message || 'Speech-to-text request failed' }, 502);
+    }
+
+    return c.json({
+      text: textFromWorkersAiResult(data),
+      language,
+      model: STT_MODEL,
+      provider: 'cloudflare-workers-ai'
+    });
+  } catch (error) {
+    console.log(`STT error: ${error}`);
+    return c.json({ error: String(error) }, 500);
+  }
+});
+
+app.post("/make-server-fd25410b/ai/tts", async (c) => {
+  const user = await getAuthenticatedUser(c.req.header('Authorization'));
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+  try {
+    const { text, language = 'en-sg', voice } = await c.req.json();
+    if (!text) return c.json({ error: "Missing text" }, 400);
+
+    const body = {
+      prompt: text,
+      lang: ttsLanguageMap[language] || 'en',
+      voice
+    };
+    const response = await runCloudflareAi(TTS_MODEL, JSON.stringify(body), 'application/json');
+    const contentType = response.headers.get('content-type') || 'audio/mpeg';
+
+    if (!response.ok) {
+      const errorPayload = contentType.includes('application/json') ? await response.json() : await response.text();
+      return c.json({ error: errorPayload?.errors?.[0]?.message || 'Text-to-speech request failed' }, 502);
+    }
+
+    if (contentType.includes('application/json')) {
+      const data = await response.json();
+      const audioBase64 = data?.result?.audio
+        || data?.result?.audioBase64
+        || data?.audio
+        || data?.audioBase64;
+      return c.json({
+        audioBase64,
+        mimeType: data?.result?.mimeType || data?.mimeType || 'audio/mpeg',
+        model: TTS_MODEL,
+        provider: 'cloudflare-workers-ai'
+      });
+    }
+
+    const buffer = await response.arrayBuffer();
+    return c.json({
+      audioBase64: bytesToBase64(buffer),
+      mimeType: contentType,
+      model: TTS_MODEL,
+      provider: 'cloudflare-workers-ai'
+    });
+  } catch (error) {
+    console.log(`TTS error: ${error}`);
+    return c.json({ error: String(error) }, 500);
+  }
+});
+
 app.post("/make-server-fd25410b/settings", async (c) => {
   const user = await getAuthenticatedUser(c.req.header('Authorization'));
   if (!user) return c.json({ error: "Unauthorized" }, 401);
@@ -286,7 +465,16 @@ app.post("/make-server-fd25410b/settings", async (c) => {
 app.get("/make-server-fd25410b/settings", async (c) => {
   const user = await getAuthenticatedUser(c.req.header('Authorization'));
   if (!user) return c.json({ error: "Unauthorized" }, 401);
-  const settings = await kv.get(`settings:${user.id}`) || { language: 'en', notifications: true, homeAddress: null };
+  const settings = await kv.get(`settings:${user.id}`) || {
+    language: 'en-sg',
+    notifications: true,
+    speechToText: true,
+    textToSpeech: true,
+    fontSize: 'Medium',
+    emergencyContact: '',
+    emergencyPhone: '',
+    homeAddress: ''
+  };
   return c.json({ settings });
 });
 

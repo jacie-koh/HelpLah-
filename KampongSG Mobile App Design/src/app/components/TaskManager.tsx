@@ -3,6 +3,7 @@ import { X, Plus, Video, Image, Mic } from 'lucide-react';
 import { projectId } from '../../../utils/supabase/info.tsx';
 import { LanguageContext } from '../App';
 import { getTranslation } from '../utils/translations';
+import { recordSpeechToText } from '../utils/voice';
 
 const TASK_TEMPLATES = [
   { title: 'Take Morning Medication', time: '08:00', videoUrl: 'https://www.youtube.com/watch?v=medication-demo', imageUrl: null },
@@ -23,7 +24,7 @@ export function TaskManager({ patientId, accessToken, onClose, onTasksCreated })
   const [customImageUrl, setCustomImageUrl] = useState('');
   const [creating, setCreating] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
-  const { language } = useContext(LanguageContext);
+  const { language, accessibilitySettings } = useContext(LanguageContext);
   const t = (key) => getTranslation(language, key);
 
   function toggleTask(task) {
@@ -34,15 +35,28 @@ export function TaskManager({ patientId, accessToken, onClose, onTasksCreated })
     }
   }
 
-  function handleVoiceInput() {
-    setIsRecording(!isRecording);
+  async function handleVoiceInput() {
+    if (!accessibilitySettings.speechToText) {
+      alert('Speech-to-text is turned off in Settings.');
+      return;
+    }
+
     if (!isRecording) {
-      // Simulate voice recording
-      alert('🎤 Voice recording started. In production, this would use SEA Lion LLM for speech-to-text conversion across Singapore dialects.');
-      setTimeout(() => {
+      setIsRecording(true);
+      alert('Voice recording started.');
+      try {
+        const transcript = await recordSpeechToText(language, accessToken);
+        if (transcript) {
+          setCustomTitle(transcript);
+        } else {
+          alert('I could not transcribe that recording. Please try again.');
+        }
+      } catch (error) {
+        console.log('Voice input error:', error);
+        alert('Microphone or speech-to-text is not available.');
+      } finally {
         setIsRecording(false);
-        setCustomTitle('Take medication after breakfast');
-      }, 2000);
+      }
     } else {
       setIsRecording(false);
     }
@@ -169,9 +183,10 @@ export function TaskManager({ patientId, accessToken, onClose, onTasksCreated })
                 />
                 <button
                   onClick={handleVoiceInput}
+                  disabled={!accessibilitySettings.speechToText}
                   className={`absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-lg transition-colors ${
                     isRecording ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
+                  } disabled:opacity-40 disabled:cursor-not-allowed`}
                   title="Voice input"
                 >
                   <Mic className={`w-5 h-5 ${isRecording ? 'animate-pulse' : ''}`} />

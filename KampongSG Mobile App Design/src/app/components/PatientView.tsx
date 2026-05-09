@@ -4,6 +4,7 @@ import { Bell, Mic, AlertCircle, Settings, CheckCircle, Video, Home, LayoutGrid 
 import { projectId } from '../../../utils/supabase/info.tsx';
 import { LanguageContext } from '../App';
 import { getTranslation } from '../utils/translations';
+import { recordSpeechToText } from '../utils/voice';
 
 export function PatientView({ user, profile, accessToken }) {
   const [tasks, setTasks] = useState([]);
@@ -11,7 +12,7 @@ export function PatientView({ user, profile, accessToken }) {
   const [location, setLocation] = useState(null);
   const [isHome, setIsHome] = useState(true);
   const navigate = useNavigate();
-  const { language } = useContext(LanguageContext);
+  const { language, accessibilitySettings } = useContext(LanguageContext);
   const t = (key) => getTranslation(language, key);
 
   useEffect(() => {
@@ -98,18 +99,58 @@ export function PatientView({ user, profile, accessToken }) {
   }
 
   async function handleVoiceNote() {
-    setIsRecording(!isRecording);
+    if (!accessibilitySettings.speechToText) {
+      alert('Speech-to-text is turned off in Settings.');
+      return;
+    }
+
     if (!isRecording) {
-      console.log('Starting voice recording...');
-      alert('Voice recording started! In production, this would use Web Speech API for recording and transcription.');
+      setIsRecording(true);
+      try {
+        console.log('Starting voice recording...');
+        alert('Voice recording started!');
+        const transcript = await recordSpeechToText(language, accessToken);
+        if (!transcript) {
+          alert('I could not transcribe that recording. Please try again.');
+          return;
+        }
+
+        const response = await fetch(
+          `https://${projectId}.supabase.co/functions/v1/make-server-fd25410b/voice-notes`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${accessToken}`
+            },
+            body: JSON.stringify({
+              patientId: user.id,
+              transcription: transcript,
+              summary: transcript
+            })
+          }
+        );
+
+        if (response.ok) {
+          alert('Voice note saved and sent to caregivers.');
+        }
+      } catch (error) {
+        console.log('Voice note error:', error);
+        alert('Microphone or speech-to-text is not available.');
+      } finally {
+        setIsRecording(false);
+      }
     } else {
       console.log('Stopping voice recording...');
-      alert('Voice note saved! It would be transcribed and sent to caregivers.');
+      setIsRecording(false);
     }
   }
 
   async function handleHelpButton() {
-    alert('🆘 Help request sent to all caregivers!\n\nYour location has been shared and the nearest caregiver will be notified to assist you.');
+    const emergencyLine = accessibilitySettings.emergencyPhone
+      ? `\n\nEmergency contact: ${accessibilitySettings.emergencyContact || 'Saved contact'} (${accessibilitySettings.emergencyPhone})`
+      : '';
+    alert(`Help request sent to all caregivers!\n\nYour location has been shared and the nearest caregiver will be notified to assist you.${emergencyLine}`);
     console.log('Sending help notification to caregivers');
   }
 
@@ -226,11 +267,12 @@ export function PatientView({ user, profile, accessToken }) {
         <div className="max-w-2xl mx-auto grid grid-cols-2 gap-4">
           <button
             onClick={handleVoiceNote}
+            disabled={!accessibilitySettings.speechToText}
             className={`py-5 rounded-2xl font-bold text-white text-lg shadow-md transition-all flex items-center justify-center gap-3 active:scale-95 ${
               isRecording
                 ? 'bg-red-600 hover:bg-red-700 animate-pulse'
                 : 'bg-blue-600 hover:bg-blue-700'
-            }`}
+            } disabled:opacity-40 disabled:cursor-not-allowed`}
           >
             <Mic className="w-7 h-7" />
             {isRecording ? t('stopRecording') : t('shareNote')}

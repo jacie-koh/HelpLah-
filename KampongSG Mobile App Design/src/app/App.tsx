@@ -9,7 +9,22 @@ import { CommunityCaregiverView } from './components/CommunityCaregiverView';
 import { SettingsScreen } from './components/SettingsScreen';
 import { AssessmentScreen } from './components/AssessmentScreen';
 
-export const LanguageContext = createContext({ language: 'en-sg', setLanguage: () => {} });
+const defaultAccessibilitySettings = {
+  notifications: true,
+  speechToText: true,
+  textToSpeech: true,
+  fontSize: 'Medium',
+  emergencyContact: '',
+  emergencyPhone: '',
+  homeAddress: ''
+};
+
+export const LanguageContext = createContext({
+  language: 'en-sg',
+  setLanguage: () => {},
+  accessibilitySettings: defaultAccessibilitySettings,
+  setAccessibilitySettings: () => {}
+});
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -17,6 +32,13 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [accessToken, setAccessToken] = useState(null);
   const [language, setLanguage] = useState('en-sg');
+  const [accessibilitySettings, setAccessibilitySettings] = useState(defaultAccessibilitySettings);
+
+  useEffect(() => {
+    const fontSize = accessibilitySettings.fontSize || 'Medium';
+    const rootFontSize = fontSize === 'Large' ? '18px' : fontSize === 'Small' ? '14px' : '16px';
+    document.documentElement.style.fontSize = rootFontSize;
+  }, [accessibilitySettings.fontSize]);
 
   useEffect(() => {
     checkUser();
@@ -56,6 +78,10 @@ export default function App() {
       if (settingsResponse.ok) {
         const data = await settingsResponse.json();
         setLanguage(data.settings?.language || 'en-sg');
+        setAccessibilitySettings({
+          ...defaultAccessibilitySettings,
+          ...data.settings
+        });
       }
     } catch (error) {
       console.log('Error loading profile:', error);
@@ -122,11 +148,15 @@ export default function App() {
   }
 
   if (!user || !profile) {
-    return <AuthScreen onSignIn={handleSignIn} onSignUp={handleSignUp} />;
+    return (
+      <LanguageContext.Provider value={{ language, setLanguage, accessibilitySettings, setAccessibilitySettings }}>
+        <AuthScreen onSignIn={handleSignIn} onSignUp={handleSignUp} />
+      </LanguageContext.Provider>
+    );
   }
 
   return (
-    <LanguageContext.Provider value={{ language, setLanguage }}>
+    <LanguageContext.Provider value={{ language, setLanguage, accessibilitySettings, setAccessibilitySettings }}>
       <BrowserRouter>
         <Routes>
           {profile.role === 'patient' && (

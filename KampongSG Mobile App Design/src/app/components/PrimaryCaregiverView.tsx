@@ -6,6 +6,7 @@ import { TaskManager } from './TaskManager';
 import { CommunitySupportScheduler } from './CommunitySupportScheduler';
 import { LanguageContext } from '../App';
 import { getTranslation } from '../utils/translations';
+import { recordSpeechToText, speakText } from '../utils/voice';
 
 export function PrimaryCaregiverView({ user, profile, accessToken }) {
   const [tasks, setTasks] = useState([]);
@@ -28,8 +29,9 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
   const [activeView, setActiveView] = useState('home');
   const [isRecordingNote, setIsRecordingNote] = useState(false);
   const navigate = useNavigate();
-  const { language } = useContext(LanguageContext);
+  const { language, accessibilitySettings } = useContext(LanguageContext);
   const t = (key) => getTranslation(language, key);
+  const visibleNotifications = accessibilitySettings.notifications ? notifications : [];
 
   useEffect(() => {
     if (user?.id && accessToken) {
@@ -109,27 +111,77 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
     await loadCommunitySupport();
   }
 
-  function handleVoiceNote() {
-    setIsRecordingNote(!isRecordingNote);
+  async function handleVoiceNote() {
+    if (!accessibilitySettings.speechToText) {
+      alert('Speech-to-text is turned off in Settings.');
+      return;
+    }
+
+    if (!patientId) {
+      alert('No linked patient found for this voice note.');
+      return;
+    }
+
     if (!isRecordingNote) {
-      alert('🎤 Voice note recording started. In production, this would use SEA Lion LLM for speech-to-text across Singapore dialects.');
-      setTimeout(() => {
+      setIsRecordingNote(true);
+      try {
+        alert('Voice note recording started.');
+        const transcript = await recordSpeechToText(language, accessToken);
+        if (!transcript) {
+          alert('I could not transcribe that recording. Please try again.');
+          return;
+        }
+
+        const response = await fetch(
+          `https://${projectId}.supabase.co/functions/v1/make-server-fd25410b/voice-notes`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${accessToken}`
+            },
+            body: JSON.stringify({
+              patientId,
+              transcription: transcript,
+              summary: transcript
+            })
+          }
+        );
+
+        if (response.ok) {
+          await loadPatientData(patientId);
+          alert('Voice note saved and shared with caregivers!');
+        }
+      } catch (error) {
+        console.log('Voice note error:', error);
+        alert('Microphone or speech-to-text is not available.');
+      } finally {
         setIsRecordingNote(false);
-        alert('Voice note saved and shared with caregivers!');
-      }, 3000);
+      }
+    } else {
+      setIsRecordingNote(false);
     }
   }
 
-  function handleTextToSpeech(text) {
-    alert(`🔊 Reading aloud: "${text}"\n\nIn production, this would use SEA Lion LLM TTS to speak in the user's preferred Singapore dialect (English, Mandarin, Hokkien, Cantonese, Malay, Tamil).`);
-    // In production: SEA Lion LLM TTS API call
+  async function handleTextToSpeech(text) {
+    if (!accessibilitySettings.textToSpeech) {
+      alert('Text-to-speech is turned off in Settings.');
+      return;
+    }
+
+    await speakText(text, language, accessToken);
   }
 
   function handleDismissNotification(notificationId) {
     setNotifications(notifications.filter(n => n.id !== notificationId));
   }
 
-  function handleReadWholePage() {
+  async function handleReadWholePage() {
+    if (!accessibilitySettings.textToSpeech) {
+      alert('Text-to-speech is turned off in Settings.');
+      return;
+    }
+
     let pageContent = `Welcome to KampongSG. Hi ${profile.name}, welcome back. `;
     
     if (activeView === 'home') {
@@ -155,12 +207,12 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
       }
     } else if (activeView === 'notifications') {
       pageContent += `Notifications: `;
-      notifications.forEach(notif => {
+      visibleNotifications.forEach(notif => {
         pageContent += `${notif.message}. ${notif.time}. `;
       });
     }
     
-    alert(`🔊 Reading entire page:\n\n"${pageContent}"\n\nIn production, this would use SEA Lion LLM TTS to speak the entire page content in the user's preferred Singapore dialect.`);
+    await speakText(pageContent, language, accessToken);
   }
 
   function handleRequestImmediateHelp() {
@@ -215,16 +267,18 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
         <div className="flex items-center gap-3">
           <button
             onClick={handleReadWholePage}
-            className="p-2 hover:bg-white/20 rounded-full transition-colors"
+            disabled={!accessibilitySettings.textToSpeech}
+            className="p-2 hover:bg-white/20 rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             title="Read Whole Page"
           >
             <Volume2 className="w-6 h-6" />
           </button>
           <button
             onClick={handleVoiceNote}
+            disabled={!accessibilitySettings.speechToText}
             className={`relative p-2 rounded-full transition-colors ${
               isRecordingNote ? 'bg-red-500 animate-pulse' : 'hover:bg-white/20'
-            }`}
+            } disabled:opacity-40 disabled:cursor-not-allowed`}
             title="Voice Note"
           >
             <Mic className="w-6 h-6" />
@@ -234,9 +288,9 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
             className="relative p-2 hover:bg-white/20 rounded-full transition-colors"
           >
             <Bell className="w-6 h-6" />
-            {notifications.length > 0 && (
+            {visibleNotifications.length > 0 && (
               <span className="absolute top-0 right-0 bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold">
-                {notifications.length}
+                {visibleNotifications.length}
               </span>
             )}
           </button>
@@ -546,11 +600,13 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
               ← {t('backToHome')}
             </button>
             <h2 className="text-2xl font-bold text-gray-800 mb-4">{t('notifications')}</h2>
-            {notifications.length === 0 ? (
+            {!accessibilitySettings.notifications ? (
+              <p className="text-gray-500 text-center py-8">Notifications are turned off in Settings.</p>
+            ) : visibleNotifications.length === 0 ? (
               <p className="text-gray-500 text-center py-8">{t('noNotifications')}</p>
             ) : (
               <div className="space-y-3">
-                {notifications.map((notification) => (
+                {visibleNotifications.map((notification) => (
                   <div
                     key={notification.id}
                     className="bg-red-50 border-2 border-red-300 rounded-2xl p-4"

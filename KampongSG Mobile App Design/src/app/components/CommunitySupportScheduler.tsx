@@ -77,7 +77,7 @@ export function CommunitySupportScheduler({ userId, accessToken, onClose, onSess
         {/* Content */}
         <div className="flex-1 overflow-auto p-6">
           <p className="text-sm text-gray-600 mb-6 bg-purple-50 border border-purple-200 rounded-lg p-3">
-            ℹ️ Community caregivers will see this request and can accept it. You'll be notified when someone accepts.
+            ℹ️ {t('schedulerInfo')}
           </p>
           
           <div className="space-y-4">
@@ -137,7 +137,7 @@ export function CommunitySupportScheduler({ userId, accessToken, onClose, onSess
               <textarea
                 value={tasks}
                 onChange={(e) => setTasks(e.target.value)}
-                placeholder="What help do you need? (e.g., Accompany patient to doctor appointment, help with daily tasks, meal preparation...)"
+                placeholder={t('supportRequestPlaceholder')}
                 rows={4}
                 className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
               />

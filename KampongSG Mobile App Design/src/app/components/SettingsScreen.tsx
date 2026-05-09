@@ -21,7 +21,7 @@ const FONT_SIZES = [
 ];
 
 export function SettingsScreen({ user, profile, accessToken, onSignOut }) {
-  const { language, setLanguage } = useContext(LanguageContext);
+  const { language, setLanguage, setAccessibilitySettings } = useContext(LanguageContext);
   const [localLanguage, setLocalLanguage] = useState(language);
   const [notifications, setNotifications] = useState(true);
   const [homeAddress, setHomeAddress] = useState('');
@@ -54,15 +54,26 @@ export function SettingsScreen({ user, profile, accessToken, onSignOut }) {
       if (response.ok) {
         const data = await response.json();
         if (data.settings) {
-          setLocalLanguage(data.settings.language || 'en-sg');
-          setLanguage(data.settings.language || 'en-sg');
-          setNotifications(data.settings.notifications !== false);
-          setHomeAddress(data.settings.homeAddress || '');
-          setSpeechToText(data.settings.speechToText !== false);
-          setTextToSpeech(data.settings.textToSpeech !== false);
-          setFontSize(data.settings.fontSize || 'Medium');
-          setEmergencyContact(data.settings.emergencyContact || '');
-          setEmergencyPhone(data.settings.emergencyPhone || '');
+          const loadedSettings = {
+            language: data.settings.language || 'en-sg',
+            notifications: data.settings.notifications !== false,
+            homeAddress: data.settings.homeAddress || '',
+            speechToText: data.settings.speechToText !== false,
+            textToSpeech: data.settings.textToSpeech !== false,
+            fontSize: data.settings.fontSize || 'Medium',
+            emergencyContact: data.settings.emergencyContact || '',
+            emergencyPhone: data.settings.emergencyPhone || ''
+          };
+          setLocalLanguage(loadedSettings.language);
+          setLanguage(loadedSettings.language);
+          setNotifications(loadedSettings.notifications);
+          setHomeAddress(loadedSettings.homeAddress);
+          setSpeechToText(loadedSettings.speechToText);
+          setTextToSpeech(loadedSettings.textToSpeech);
+          setFontSize(loadedSettings.fontSize);
+          setEmergencyContact(loadedSettings.emergencyContact);
+          setEmergencyPhone(loadedSettings.emergencyPhone);
+          setAccessibilitySettings(loadedSettings);
         }
       }
     } catch (error) {
@@ -102,8 +113,20 @@ export function SettingsScreen({ user, profile, accessToken, onSignOut }) {
       );
 
       if (response.ok) {
-        alert(t('settingsSaved'));
+        if (notifications && typeof Notification !== 'undefined' && Notification.permission === 'default') {
+          await Notification.requestPermission();
+        }
         setLanguage(localLanguage);
+        setAccessibilitySettings({
+          notifications,
+          homeAddress,
+          speechToText,
+          textToSpeech,
+          fontSize,
+          emergencyContact,
+          emergencyPhone
+        });
+        alert(t('settingsSaved'));
       }
     } catch (error) {
       console.log('Error saving settings:', error);

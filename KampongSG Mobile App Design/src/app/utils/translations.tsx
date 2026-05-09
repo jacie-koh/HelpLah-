@@ -105,7 +105,24 @@ export const translations = {
     waitingCaregiver: 'Waiting for community caregiver...',
     welcome: 'Hi',
     welcomeBack: 'welcome back!',
-    youAreHome: 'You are home'
+    youAreHome: 'You are home',
+    from: 'From',
+    to: 'To',
+    off: 'Off',
+    edit: 'Edit',
+    save: 'Save',
+    addedToSchedule: 'Added to your schedule',
+    noteTitlePlaceholder: 'Note title...',
+    addCommunityNotePlaceholder: 'Add a community note...',
+    notesWindow: 'Notes are available only for patients you are handling from 60 minutes before until 60 minutes after the assignment.',
+    alertsDescription: 'Care requests, new assignment drops, and daily volunteer prompts.',
+    resourceQuickLinks: 'Quick links and support information for community caregivers.',
+    helplineContacts: 'Helpline Contacts',
+    chatbotDescription: 'Voice and text communication with primary caregivers and patients.',
+    openChatbot: 'Open Chatbot',
+    schedulerInfo: "Community caregivers will see this request and can accept it. You'll be notified when someone accepts.",
+    supportRequestPlaceholder: 'What help do you need?'
+    ,name: 'Name', email: 'Email', password: 'Password', signIn: 'Sign In', signUp: 'Sign Up', alreadyHaveAccount: 'Already have an account? Sign in', dontHaveAccount: "Don't have an account? Sign up", patientName: 'Patient Name', patientPhone: 'Patient Phone', iAmA: 'I am a...', createDemoAccounts: 'Create Demo Accounts'
   },
   'zh-sg': {
     add: '添加',
@@ -211,7 +228,24 @@ export const translations = {
     waitingCaregiver: '等待社区护理员...',
     welcome: '嗨',
     welcomeBack: '欢迎回来！',
-    youAreHome: '你在家'
+    youAreHome: '你在家',
+    from: '从',
+    to: '到',
+    off: '休息',
+    edit: '编辑',
+    save: '保存',
+    addedToSchedule: '已加入你的日程',
+    noteTitlePlaceholder: '笔记标题...',
+    addCommunityNotePlaceholder: '添加社区笔记...',
+    notesWindow: '笔记只会在你照护该病人的任务前60分钟至任务后60分钟开放。',
+    alertsDescription: '照护请求、新任务发布和每日志愿服务提醒。',
+    resourceQuickLinks: '社区护理员可用的快捷链接和支援信息。',
+    helplineContacts: '求助热线',
+    chatbotDescription: '与主要护理员和病人进行语音及文字沟通。',
+    openChatbot: '打开聊天助手',
+    schedulerInfo: '社区护理员会看到这个请求并可以接受。有人接受后你会收到通知。',
+    supportRequestPlaceholder: '你需要什么帮助？'
+    ,name: '姓名', email: '电邮', password: '密码', signIn: '登录', signUp: '注册', alreadyHaveAccount: '已有账号？登录', dontHaveAccount: '没有账号？注册', patientName: '病人姓名', patientPhone: '病人电话', iAmA: '我是...', createDemoAccounts: '创建示范账号'
   },
   'zh-min': {
     add: '添',
@@ -317,7 +351,24 @@ export const translations = {
     waitingCaregiver: '等社区照护员...',
     welcome: '你好',
     welcomeBack: '欢迎转来！',
-    youAreHome: '你在厝'
+    youAreHome: '你在厝',
+    from: '对',
+    to: '到',
+    off: '休息',
+    edit: '改',
+    save: '保存',
+    addedToSchedule: '已加入你的日程',
+    noteTitlePlaceholder: '笔记标题...',
+    addCommunityNotePlaceholder: '添社区笔记...',
+    notesWindow: '笔记只会在你照护这个病人的任务前60分钟到任务后60分钟开放。',
+    alertsDescription: '照护请求、新任务发布、每日志愿服务提醒。',
+    resourceQuickLinks: '社区照护员可用的快速连结与支援资料。',
+    helplineContacts: '求助热线',
+    chatbotDescription: '用语音或文字联络主要照护员和病人。',
+    openChatbot: '打开聊天助手',
+    schedulerInfo: '社区照护员会看着这个请求，也会当接受。有人接受你会收到通知。',
+    supportRequestPlaceholder: '你需要啥物帮助？'
+    ,name: '姓名', email: '电邮', password: '密码', signIn: '登入', signUp: '注册', alreadyHaveAccount: '已有账号？登入', dontHaveAccount: '无账号？注册', patientName: '病人姓名', patientPhone: '病人电话', iAmA: '我是...', createDemoAccounts: '建立示范账号'
   },
   'zh-yue': {
     add: '加入',
@@ -423,7 +474,24 @@ export const translations = {
     waitingCaregiver: '等緊社區護理員...',
     welcome: '你好',
     welcomeBack: '歡迎返嚟！',
-    youAreHome: '你喺屋企'
+    youAreHome: '你喺屋企',
+    from: '由',
+    to: '到',
+    off: '休息',
+    edit: '編輯',
+    save: '保存',
+    addedToSchedule: '已加入你嘅日程',
+    noteTitlePlaceholder: '記錄標題...',
+    addCommunityNotePlaceholder: '加入社區記錄...',
+    notesWindow: '記錄只會喺你照護呢位病人嘅任務前60分鐘至任務後60分鐘開放。',
+    alertsDescription: '照護請求、新任務發佈同每日義工提示。',
+    resourceQuickLinks: '社區護理員可用嘅快捷連結同支援資料。',
+    helplineContacts: '求助熱線',
+    chatbotDescription: '用語音同文字同主要護理員及病人溝通。',
+    openChatbot: '打開聊天助手',
+    schedulerInfo: '社區護理員會見到呢個請求並可以接受。有人接受後你會收到通知。',
+    supportRequestPlaceholder: '你需要咩幫手？'
+    ,name: '姓名', email: '電郵', password: '密碼', signIn: '登入', signUp: '註冊', alreadyHaveAccount: '已有帳號？登入', dontHaveAccount: '未有帳號？註冊', patientName: '病人姓名', patientPhone: '病人電話', iAmA: '我係...', createDemoAccounts: '建立示範帳號'
   },
   'ms-sg': {
     add: 'Tambah',
@@ -529,7 +597,24 @@ export const translations = {
     waitingCaregiver: 'Menunggu penjaga komuniti...',
     welcome: 'Hai',
     welcomeBack: 'selamat kembali!',
-    youAreHome: 'Anda di rumah'
+    youAreHome: 'Anda di rumah',
+    from: 'Dari',
+    to: 'Hingga',
+    off: 'Cuti',
+    edit: 'Edit',
+    save: 'Simpan',
+    addedToSchedule: 'Ditambah ke jadual anda',
+    noteTitlePlaceholder: 'Tajuk nota...',
+    addCommunityNotePlaceholder: 'Tambah nota komuniti...',
+    notesWindow: 'Nota hanya tersedia untuk pesakit yang anda jaga dari 60 minit sebelum hingga 60 minit selepas tugasan.',
+    alertsDescription: 'Permintaan jagaan, tugasan baharu, dan galakan sukarelawan harian.',
+    resourceQuickLinks: 'Pautan pantas dan maklumat sokongan untuk penjaga komuniti.',
+    helplineContacts: 'Talian Bantuan',
+    chatbotDescription: 'Komunikasi suara dan teks dengan penjaga utama dan pesakit.',
+    openChatbot: 'Buka Chatbot',
+    schedulerInfo: 'Penjaga komuniti akan melihat permintaan ini dan boleh menerimanya. Anda akan dimaklumkan apabila seseorang menerimanya.',
+    supportRequestPlaceholder: 'Apakah bantuan yang anda perlukan?'
+    ,name: 'Nama', email: 'E-mel', password: 'Kata Laluan', signIn: 'Log Masuk', signUp: 'Daftar', alreadyHaveAccount: 'Sudah ada akaun? Log masuk', dontHaveAccount: 'Tiada akaun? Daftar', patientName: 'Nama Pesakit', patientPhone: 'Telefon Pesakit', iAmA: 'Saya ialah...', createDemoAccounts: 'Cipta Akaun Demo'
   },
   'ta-sg': {
     add: 'சேர்',
@@ -635,7 +720,24 @@ export const translations = {
     waitingCaregiver: 'சமூக பராமரிப்பாளருக்காக காத்திருக்கிறது...',
     welcome: 'வணக்கம்',
     welcomeBack: 'மீண்டும் வரவேற்கிறோம்!',
-    youAreHome: 'நீங்கள் வீட்டில் இருக்கிறீர்கள்'
+    youAreHome: 'நீங்கள் வீட்டில் இருக்கிறீர்கள்',
+    from: 'இருந்து',
+    to: 'வரை',
+    off: 'ஓய்வு',
+    edit: 'திருத்து',
+    save: 'சேமி',
+    addedToSchedule: 'உங்கள் அட்டவணையில் சேர்க்கப்பட்டது',
+    noteTitlePlaceholder: 'குறிப்பு தலைப்பு...',
+    addCommunityNotePlaceholder: 'சமூக குறிப்பைச் சேர்...',
+    notesWindow: 'நீங்கள் கவனிக்கும் நோயாளிக்கான குறிப்புகள், பணிக்கு 60 நிமிடங்கள் முன் முதல் பணி முடிந்த 60 நிமிடங்கள் வரை மட்டுமே கிடைக்கும்.',
+    alertsDescription: 'பராமரிப்பு கோரிக்கைகள், புதிய பணிகள், தினசரி தன்னார்வ நினைவூட்டல்கள்.',
+    resourceQuickLinks: 'சமூக பராமரிப்பாளர்களுக்கான விரைவு இணைப்புகள் மற்றும் ஆதரவு தகவல்.',
+    helplineContacts: 'உதவி எண்கள்',
+    chatbotDescription: 'முதன்மை பராமரிப்பாளர்கள் மற்றும் நோயாளிகளுடன் குரல் மற்றும் உரை தொடர்பு.',
+    openChatbot: 'அரட்டை உதவியைத் திற',
+    schedulerInfo: 'சமூக பராமரிப்பாளர்கள் இந்த கோரிக்கையைப் பார்த்து ஏற்கலாம். யாராவது ஏற்றால் உங்களுக்கு அறிவிப்பு வரும்.',
+    supportRequestPlaceholder: 'எந்த உதவி தேவை?'
+    ,name: 'பெயர்', email: 'மின்னஞ்சல்', password: 'கடவுச்சொல்', signIn: 'உள்நுழை', signUp: 'பதிவு செய்', alreadyHaveAccount: 'ஏற்கனவே கணக்கு உள்ளதா? உள்நுழை', dontHaveAccount: 'கணக்கு இல்லையா? பதிவு செய்', patientName: 'நோயாளி பெயர்', patientPhone: 'நோயாளி தொலைபேசி', iAmA: 'நான்...', createDemoAccounts: 'மாதிரி கணக்குகளை உருவாக்கு'
   }
 };
 

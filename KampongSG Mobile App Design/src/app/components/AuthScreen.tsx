@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useContext, useState } from 'react';
 import { User, Lock, Phone, UserCircle, Heart, Users } from 'lucide-react';
 import { DemoAccountsSetup } from './DemoAccountsSetup';
+import { LanguageContext } from '../App';
+import { getTranslation } from '../utils/translations';
 
 export function AuthScreen({ onSignIn, onSignUp }) {
   const [isSignUp, setIsSignUp] = useState(false);
@@ -14,6 +16,8 @@ export function AuthScreen({ onSignIn, onSignUp }) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showDemoSetup, setShowDemoSetup] = useState(false);
+  const { language } = useContext(LanguageContext);
+  const t = (key) => getTranslation(language, key);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -55,7 +59,7 @@ export function AuthScreen({ onSignIn, onSignUp }) {
               <div>
                 <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-1">
                   <UserCircle className="w-4 h-4" />
-                  Name
+                  {t('name')}
                 </label>
                 <input
                   type="text"
@@ -70,7 +74,7 @@ export function AuthScreen({ onSignIn, onSignUp }) {
               <div>
                 <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-1">
                   <Phone className="w-4 h-4" />
-                  Phone Number
+                  {t('phoneNumber')}
                 </label>
                 <input
                   type="tel"
@@ -86,7 +90,7 @@ export function AuthScreen({ onSignIn, onSignUp }) {
           <div>
             <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-1">
               <User className="w-4 h-4" />
-              Email
+              {t('email')}
             </label>
             <input
               type="email"
@@ -101,7 +105,7 @@ export function AuthScreen({ onSignIn, onSignUp }) {
           <div>
             <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-1">
               <Lock className="w-4 h-4" />
-              Password
+              {t('password')}
             </label>
             <input
               type="password"
@@ -117,7 +121,7 @@ export function AuthScreen({ onSignIn, onSignUp }) {
             <>
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-2 block">
-                  I am a...
+                  {t('iAmA')}
                 </label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
@@ -129,7 +133,7 @@ export function AuthScreen({ onSignIn, onSignUp }) {
                         : 'border-gray-300 bg-white text-gray-700'
                     }`}
                   >
-                    Primary Caregiver
+                    {t('primaryCaregiver')}
                   </button>
                   <button
                     type="button"
@@ -140,7 +144,7 @@ export function AuthScreen({ onSignIn, onSignUp }) {
                         : 'border-gray-300 bg-white text-gray-700'
                     }`}
                   >
-                    Community Caregiver
+                    {t('communityCaregiver')}
                   </button>
                 </div>
               </div>
@@ -148,12 +152,12 @@ export function AuthScreen({ onSignIn, onSignUp }) {
               {role === 'primary_caregiver' && (
                 <>
                   <div className="bg-blue-50 rounded-xl p-4 border border-blue-200">
-                    <p className="text-sm font-semibold text-blue-900 mb-3">Patient Information</p>
+                    <p className="text-sm font-semibold text-blue-900 mb-3">{t('patient')}</p>
                     <div className="space-y-3">
                       <div>
                         <label className="flex items-center gap-2 text-sm font-medium text-blue-800 mb-1">
                           <UserCircle className="w-4 h-4" />
-                          Patient Name
+                          {t('patientName')}
                         </label>
                         <input
                           type="text"
@@ -167,7 +171,7 @@ export function AuthScreen({ onSignIn, onSignUp }) {
                       <div>
                         <label className="flex items-center gap-2 text-sm font-medium text-blue-800 mb-1">
                           <Phone className="w-4 h-4" />
-                          Patient Phone
+                          {t('patientPhone')}
                         </label>
                         <input
                           type="tel"
@@ -196,7 +200,7 @@ export function AuthScreen({ onSignIn, onSignUp }) {
             disabled={loading}
             className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50"
           >
-            {loading ? 'Loading...' : isSignUp ? 'Sign Up' : 'Sign In'}
+            {loading ? t('saving') : isSignUp ? t('signUp') : t('signIn')}
           </button>
         </form>
 
@@ -208,7 +212,7 @@ export function AuthScreen({ onSignIn, onSignUp }) {
             }}
             className="text-blue-600 hover:text-blue-700 font-medium text-sm"
           >
-            {isSignUp ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
+            {isSignUp ? t('alreadyHaveAccount') : t('dontHaveAccount')}
           </button>
 
           <div className="border-t border-gray-200 pt-4">
@@ -217,7 +221,7 @@ export function AuthScreen({ onSignIn, onSignUp }) {
               className="inline-flex items-center gap-2 text-purple-600 hover:text-purple-700 font-medium text-sm"
             >
               <Users className="w-4 h-4" />
-              Create Demo Accounts
+              {t('createDemoAccounts')}
             </button>
           </div>
         </div>
