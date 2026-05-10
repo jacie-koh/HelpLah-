@@ -44,10 +44,10 @@ export function AuthScreen({ onSignIn, onSignUp }) {
   }
 
   return (
-    <div className="size-full flex items-center justify-center bg-gradient-to-b from-blue-50 to-blue-100 p-4">
-      <div className="w-full max-w-md bg-white rounded-3xl shadow-xl p-8">
+    <div className="size-full flex items-center justify-center isomer-app-shell p-4">
+      <div className="w-full max-w-md isomer-card p-8">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 bg-blue-600 rounded-full mb-4">
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-blue-700 rounded-full mb-4">
             <Heart className="w-10 h-10 text-white" />
           </div>
           <h1 className="text-3xl font-bold text-gray-800">{t('brandName')}</h1>
@@ -199,7 +199,7 @@ export function AuthScreen({ onSignIn, onSignUp }) {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50"
+            className="w-full bg-blue-700 text-white py-3 rounded-xl font-semibold hover:bg-blue-800 transition-colors disabled:opacity-50"
           >
             {loading ? t('saving') : isSignUp ? t('signUp') : t('signIn')}
           </button>
@@ -219,7 +219,7 @@ export function AuthScreen({ onSignIn, onSignUp }) {
           <div className="border-t border-gray-200 pt-4">
             <button
               onClick={() => setShowDemoSetup(true)}
-              className="inline-flex items-center gap-2 text-purple-600 hover:text-purple-700 font-medium text-sm"
+              className="inline-flex items-center gap-2 text-blue-700 hover:text-blue-800 font-medium text-sm"
             >
               <Users className="w-4 h-4" />
               {t('createDemoAccounts')}

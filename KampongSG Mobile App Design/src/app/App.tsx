@@ -102,6 +102,7 @@ export default function App() {
       setUser(data.user);
       setAccessToken(data.session.access_token);
       await loadProfile(data.session.access_token);
+      window.history.replaceState(null, '', '/');
     } catch (error) {
       console.log('Sign in error:', error);
       throw error;
@@ -139,6 +140,7 @@ export default function App() {
     setUser(null);
     setProfile(null);
     setAccessToken(null);
+    window.history.replaceState(null, '', '/');
   }
 
   const languageContextValue = useMemo(

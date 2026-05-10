@@ -28,6 +28,8 @@ export function SettingsScreen({ user, profile, accessToken, onSignOut }) {
   const [speechToText, setSpeechToText] = useState(true);
   const [textToSpeech, setTextToSpeech] = useState(true);
   const [fontSize, setFontSize] = useState('Medium');
+  const [contactPhone, setContactPhone] = useState(profile?.phoneNumber || '');
+  const [taskReminderCount, setTaskReminderCount] = useState(2);
   const [emergencyContact, setEmergencyContact] = useState('');
   const [emergencyPhone, setEmergencyPhone] = useState('');
   const [saving, setSaving] = useState(false);
@@ -61,6 +63,8 @@ export function SettingsScreen({ user, profile, accessToken, onSignOut }) {
             speechToText: data.settings.speechToText !== false,
             textToSpeech: data.settings.textToSpeech !== false,
             fontSize: data.settings.fontSize || 'Medium',
+            contactPhone: data.settings.contactPhone || profile?.phoneNumber || '',
+            taskReminderCount: Number(data.settings.taskReminderCount ?? 2),
             emergencyContact: data.settings.emergencyContact || '',
             emergencyPhone: data.settings.emergencyPhone || ''
           };
@@ -71,6 +75,8 @@ export function SettingsScreen({ user, profile, accessToken, onSignOut }) {
           setSpeechToText(loadedSettings.speechToText);
           setTextToSpeech(loadedSettings.textToSpeech);
           setFontSize(loadedSettings.fontSize);
+          setContactPhone(loadedSettings.contactPhone);
+          setTaskReminderCount(loadedSettings.taskReminderCount);
           setEmergencyContact(loadedSettings.emergencyContact);
           setEmergencyPhone(loadedSettings.emergencyPhone);
           setAccessibilitySettings(loadedSettings);
@@ -107,6 +113,8 @@ export function SettingsScreen({ user, profile, accessToken, onSignOut }) {
             speechToText,
             textToSpeech,
             fontSize,
+            contactPhone,
+            taskReminderCount,
             emergencyContact,
             emergencyPhone
           })
@@ -124,6 +132,8 @@ export function SettingsScreen({ user, profile, accessToken, onSignOut }) {
           speechToText,
           textToSpeech,
           fontSize,
+          contactPhone,
+          taskReminderCount,
           emergencyContact,
           emergencyPhone
         });
@@ -138,7 +148,7 @@ export function SettingsScreen({ user, profile, accessToken, onSignOut }) {
   }
 
   return (
-    <div className="size-full bg-gradient-to-b from-gray-50 to-white overflow-auto pb-6">
+    <div className="size-full isomer-app-shell overflow-auto pb-6">
       <div className="max-w-2xl mx-auto p-4">
         <div className="flex items-center gap-4 mb-6 pt-4">
           <button
@@ -151,7 +161,7 @@ export function SettingsScreen({ user, profile, accessToken, onSignOut }) {
         </div>
 
         {/* Profile Info */}
-        <div className="bg-white rounded-2xl p-5 shadow-md mb-4">
+        <div className="isomer-card p-5 mb-4">
           <div className="flex items-center gap-4">
             <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ backgroundColor: '#E1F0FF' }}>
               <User className="w-8 h-8" style={{ color: '#4A9EFF' }} />
@@ -172,8 +182,25 @@ export function SettingsScreen({ user, profile, accessToken, onSignOut }) {
           {t('logOut')}
         </button>
 
+        {/* Contact Phone */}
+        <div className="isomer-card p-5 mb-4">
+          <div className="flex items-center gap-3 mb-4">
+            <Phone className="w-5 h-5 text-blue-600" />
+            <h3 className="text-xl font-bold text-gray-800">{t('contactInfo')}</h3>
+          </div>
+
+          <label className="block text-sm font-semibold text-gray-700 mb-2">{t('phoneNumber')}</label>
+          <input
+            type="tel"
+            value={contactPhone}
+            onChange={(e) => setContactPhone(e.target.value)}
+            placeholder={t('enterPhoneNumber')}
+            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+
         {/* Push Notifications */}
-        <div className="bg-white rounded-2xl p-5 shadow-md mb-4">
+        <div className="isomer-card p-5 mb-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Bell className="w-5 h-5 text-gray-600" />
@@ -198,7 +225,7 @@ export function SettingsScreen({ user, profile, accessToken, onSignOut }) {
         </div>
 
         {/* Language */}
-        <div className="bg-white rounded-2xl p-5 shadow-md mb-4">
+        <div className="isomer-card p-5 mb-4">
           <div className="flex items-center gap-3 mb-3">
             <Globe className="w-5 h-5 text-gray-600" />
             <h3 className="text-lg font-semibold text-gray-800">{t('language')}</h3>
@@ -217,7 +244,7 @@ export function SettingsScreen({ user, profile, accessToken, onSignOut }) {
         </div>
 
         {/* Home Address */}
-        <div className="bg-white rounded-2xl p-5 shadow-md mb-4">
+        <div className="isomer-card p-5 mb-4">
           <div className="flex items-center gap-3 mb-3">
             <Home className="w-5 h-5 text-gray-600" />
             <h3 className="text-lg font-semibold text-gray-800">{t('homeAddress')}</h3>
@@ -232,7 +259,7 @@ export function SettingsScreen({ user, profile, accessToken, onSignOut }) {
         </div>
 
         {/* Accessibility Section */}
-        <div className="bg-white rounded-2xl p-5 shadow-md mb-4">
+        <div className="isomer-card p-5 mb-4">
           <h3 className="text-xl font-bold text-gray-800 mb-4">{t('accessibility')}</h3>
           
           {/* Speech-to-Text */}
@@ -307,7 +334,7 @@ export function SettingsScreen({ user, profile, accessToken, onSignOut }) {
         </div>
 
         {/* Emergency Contact */}
-        <div className="bg-white rounded-2xl p-5 shadow-md mb-4">
+        <div className="isomer-card p-5 mb-4">
           <div className="flex items-center gap-3 mb-4">
             <Phone className="w-5 h-5 text-red-600" />
             <h3 className="text-xl font-bold text-gray-800">{t('emergencyContact')}</h3>
@@ -335,6 +362,25 @@ export function SettingsScreen({ user, profile, accessToken, onSignOut }) {
             />
           </div>
         </div>
+
+        {profile.role === 'patient' && (
+          <div className="isomer-card p-5 mb-4">
+            <div className="flex items-center gap-3 mb-4">
+              <Bell className="w-5 h-5 text-blue-600" />
+              <h3 className="text-xl font-bold text-gray-800">{t('taskReminders')}</h3>
+            </div>
+
+            <label className="block text-sm font-semibold text-gray-700 mb-2">{t('remindersPerTask')}</label>
+            <input
+              type="number"
+              min="0"
+              max="5"
+              value={taskReminderCount}
+              onChange={(e) => setTaskReminderCount(Math.max(0, Math.min(5, Number(e.target.value) || 0)))}
+              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        )}
 
         {/* Save Button */}
         <button

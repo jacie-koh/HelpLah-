@@ -109,7 +109,7 @@ export function AssessmentScreen({ user, profile, accessToken, patientId }) {
     const interpretation = getScoreInterpretation(totalScore);
 
     return (
-      <div className="size-full bg-gradient-to-b from-blue-50 to-white overflow-auto">
+      <div className="size-full isomer-app-shell overflow-auto">
         <div className="max-w-2xl mx-auto p-4 pb-24">
           <div className="flex items-center gap-4 mb-6 pt-4">
             <button
@@ -121,7 +121,7 @@ export function AssessmentScreen({ user, profile, accessToken, patientId }) {
             <h1 className="text-3xl font-bold text-gray-800">{t('assessmentCompleteTitle')}</h1>
           </div>
 
-          <div className="bg-white rounded-3xl p-8 shadow-xl text-center mb-6">
+          <div className="isomer-card p-8 text-center mb-6">
             <CheckCircle className="w-20 h-20 text-green-500 mx-auto mb-4" />
             <h2 className="text-2xl font-bold text-gray-800 mb-2">{t('assessmentThankYou')}</h2>
             <p className="text-gray-600">{t('assessmentSubmitted')}</p>
@@ -159,7 +159,7 @@ export function AssessmentScreen({ user, profile, accessToken, patientId }) {
   const progress = ((currentQuestionIndex + 1) / ASSESSMENT_IDS.length) * 100;
 
   return (
-    <div className="size-full bg-gradient-to-b from-blue-50 to-white overflow-auto">
+    <div className="size-full isomer-app-shell overflow-auto">
       <div className="max-w-2xl mx-auto p-4 pb-24">
         <div className="flex items-center gap-4 mb-6 pt-4">
           <button onClick={goBack} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
@@ -182,7 +182,7 @@ export function AssessmentScreen({ user, profile, accessToken, patientId }) {
           </div>
         </div>
 
-        <div className="bg-white rounded-3xl p-8 shadow-xl mb-6">
+        <div className="isomer-card p-8 mb-6">
           <div className="flex items-start justify-center gap-3">
             <button
               onClick={handleReadQuestion}

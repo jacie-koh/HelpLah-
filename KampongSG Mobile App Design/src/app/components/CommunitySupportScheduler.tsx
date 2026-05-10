@@ -54,7 +54,7 @@ export function CommunitySupportScheduler({ userId, accessToken, onClose, onSess
             time,
             duration: DURATION_OPTIONS.find((option) => option.value === duration)?.label || `${duration} hours`,
             tasks,
-            status: 'pending', // Waiting for a community caregiver to accept
+            status: 'open',
             caregiverName: null // Not assigned yet
           })
         }
@@ -105,7 +105,7 @@ export function CommunitySupportScheduler({ userId, accessToken, onClose, onSess
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200" style={{ backgroundColor: '#E8F2FF' }}>
           <div className="flex items-center gap-3">
-            <Users className="w-6 h-6 text-purple-600" />
+            <Users className="w-6 h-6 text-blue-700" />
             <h2 className="text-2xl font-bold text-gray-800">{t('requestCommunitySupport')}</h2>
           </div>
           <button
@@ -203,7 +203,7 @@ export function CommunitySupportScheduler({ userId, accessToken, onClose, onSess
           <button
             onClick={handleSchedule}
             disabled={!date || !time || creating}
-            className="w-full bg-purple-600 text-white py-4 rounded-xl font-semibold hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-blue-700 text-white py-4 rounded-xl font-semibold hover:bg-blue-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {creating ? t('creatingRequest') : t('requestCommunitySupport')}
           </button>

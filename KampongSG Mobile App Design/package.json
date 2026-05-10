@@ -6,6 +6,7 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite",
+    "start": "vite preview --host 0.0.0.0 --port ${PORT:-4173}",
     "sealion:dev": "npm --prefix cloudflare/sea-lion-worker run dev",
     "sealion:deploy": "npm --prefix cloudflare/sea-lion-worker run deploy"
   },

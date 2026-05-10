@@ -2,23 +2,23 @@
 
 :root {
   --font-size: 16px;
-  --background: #ffffff;
-  --foreground: oklch(0.145 0 0);
+  --background: #f7f9fc;
+  --foreground: #1f2937;
   --card: #ffffff;
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: #1f2937;
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: #030213;
+  --primary: #005eb8;
   --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.95 0.0058 264.53);
-  --secondary-foreground: #030213;
-  --muted: #ececf0;
-  --muted-foreground: #717182;
-  --accent: #e9ebef;
-  --accent-foreground: #030213;
+  --secondary: #eef4fb;
+  --secondary-foreground: #1f2937;
+  --muted: #eef2f7;
+  --muted-foreground: #5b6675;
+  --accent: #e8f2ff;
+  --accent-foreground: #004b93;
   --destructive: #d4183d;
   --destructive-foreground: #ffffff;
-  --border: rgba(0, 0, 0, 0.1);
+  --border: #d8dee8;
   --input: transparent;
   --input-background: #f3f3f5;
   --switch-background: #cbced4;
@@ -30,7 +30,15 @@
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
-  --radius: 0.625rem;
+  --radius: 0.5rem;
+  --isomer-blue: #005eb8;
+  --isomer-blue-dark: #004b93;
+  --isomer-blue-soft: #e8f2ff;
+  --isomer-surface: #ffffff;
+  --isomer-page: #f7f9fc;
+  --isomer-border: #d8dee8;
+  --isomer-text: #1f2937;
+  --isomer-muted: #5b6675;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: #030213;
@@ -126,6 +134,7 @@
 
   body {
     @apply bg-background text-foreground;
+    color: var(--isomer-text);
   }
 
   /**
@@ -177,5 +186,39 @@
     font-size: var(--text-base);
     font-weight: var(--font-weight-normal);
     line-height: 1.5;
+  }
+}
+
+@layer components {
+  .isomer-topbar {
+    background: var(--isomer-surface);
+    color: var(--isomer-text);
+    border-bottom: 1px solid var(--isomer-border);
+    box-shadow: none;
+  }
+
+  .isomer-app-shell {
+    background: var(--isomer-page);
+  }
+
+  .isomer-card {
+    background: var(--isomer-surface);
+    border: 1px solid var(--isomer-border);
+    border-radius: 0.75rem;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  }
+}
+
+@layer utilities {
+  .rounded-2xl,
+  .rounded-3xl {
+    border-radius: 0.75rem;
+  }
+
+  .shadow-md,
+  .shadow-lg,
+  .shadow-xl,
+  .shadow-2xl {
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
   }
 }

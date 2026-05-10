@@ -503,6 +503,20 @@ async function getUserProfile(userId: string) {
   return await kv.get(`user:${userId}`);
 }
 
+async function getContactPhoneForUser(userId: string) {
+  const settings = await kv.get(`settings:${userId}`);
+  if (typeof settings?.contactPhone === 'string' && settings.contactPhone.trim()) {
+    return settings.contactPhone.trim();
+  }
+
+  const profile = await getUserProfile(userId);
+  if (typeof profile?.phoneNumber === 'string' && profile.phoneNumber.trim()) {
+    return profile.phoneNumber.trim();
+  }
+
+  return '';
+}
+
 async function getPrimaryCaregiverIdForPatient(patientId: string) {
   const patientProfile = await getUserProfile(patientId);
   return patientProfile?.primaryCaregiverId || null;
@@ -728,6 +742,20 @@ app.post("/make-server-fd25410b/tasks/:taskId/complete", async (c) => {
   task.completedAt = new Date().toISOString();
   task.status = 'completed';
   await kv.set(`task:${taskId}`, task);
+
+  const primaryCaregiverId = task.patientId ? await getPrimaryCaregiverIdForPatient(task.patientId) : null;
+  if (primaryCaregiverId) {
+    await createNotification(primaryCaregiverId, {
+      type: 'patient_task_completed',
+      patientId: task.patientId,
+      taskId,
+      messageKey: 'patientCompletedTask',
+      message: task.title || 'Patient completed a task',
+      time: task.completedAt,
+      severity: 'info'
+    });
+  }
+
   return c.json({ success: true });
 });
 
@@ -957,6 +985,12 @@ app.post("/make-server-fd25410b/assessment", async (c) => {
   caregiverAssessments.push(assessmentId);
   await kv.set(`caregiver:${caregiverId}:assessments`, caregiverAssessments);
   await kv.set(`caregiver:${caregiverId}:latest-score`, score);
+  await kv.set(`caregiver:${caregiverId}:latest-assessment`, {
+    id: assessmentId,
+    score,
+    patientId,
+    createdAt: new Date().toISOString()
+  });
   return c.json({ assessmentId, score });
 });
 
@@ -965,7 +999,8 @@ app.get("/make-server-fd25410b/caregiver/:caregiverId/latest-score", async (c) =
   if (!user) return c.json({ error: "Unauthorized" }, 401);
   const caregiverId = c.req.param('caregiverId');
   const score = await kv.get(`caregiver:${caregiverId}:latest-score`);
-  return c.json({ score });
+  const latestAssessment = await kv.get(`caregiver:${caregiverId}:latest-assessment`);
+  return c.json({ score, latestAssessment });
 });
 
 app.get("/make-server-fd25410b/caregiver/:caregiverId/patient", async (c) => {
@@ -973,7 +1008,16 @@ app.get("/make-server-fd25410b/caregiver/:caregiverId/patient", async (c) => {
   if (!user) return c.json({ error: "Unauthorized" }, 401);
   const caregiverId = c.req.param('caregiverId');
   const patientId = await kv.get(`caregiver:${caregiverId}:patient`);
-  return c.json({ patientId });
+  const patient = patientId ? await getUserProfile(patientId) : null;
+  const patientPhone = patientId ? await getContactPhoneForUser(patientId) : '';
+  return c.json({
+    patientId,
+    patient: patient ? {
+      id: patient.id,
+      name: patient.name,
+      phoneNumber: patientPhone
+    } : null
+  });
 });
 
 app.post("/make-server-fd25410b/vitals", async (c) => {
@@ -1005,12 +1049,196 @@ app.post("/make-server-fd25410b/availability", async (c) => {
   return c.json({ success: true });
 });
 
+app.post("/make-server-fd25410b/community-support", async (c) => {
+  const user = await getAuthenticatedUser(c.req.header('Authorization'));
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+  const request = await c.req.json();
+  const requestId = request.id || crypto.randomUUID();
+  const patientId = await kv.get(`caregiver:${user.id}:patient`);
+  const patient = patientId ? await getUserProfile(patientId) : null;
+  const item = {
+    ...request,
+    id: requestId,
+    requestedByUserId: user.id,
+    requesterName: (await getUserProfile(user.id))?.name || '',
+    patientId,
+    patientName: patient?.name || 'Patient',
+    status: request.status || 'open',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+
+  await kv.set(`community-support:${requestId}`, item);
+  const userRequestIds = await kv.get(`user:${user.id}:community-support`) || [];
+  await kv.set(`user:${user.id}:community-support`, [requestId, ...userRequestIds].slice(0, 100));
+  const openRequestIds = await kv.get('community-support:open') || [];
+  await kv.set('community-support:open', [requestId, ...openRequestIds.filter((id: string) => id !== requestId)].slice(0, 100));
+  return c.json({ request: item });
+});
+
+app.get("/make-server-fd25410b/community-support", async (c) => {
+  const user = await getAuthenticatedUser(c.req.header('Authorization'));
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+  const requestIds = await kv.get(`user:${user.id}:community-support`) || [];
+  const requests = await Promise.all(requestIds.map((id: string) => kv.get(`community-support:${id}`)));
+  return c.json({ requests: requests.filter(Boolean) });
+});
+
+app.get("/make-server-fd25410b/community-support/open", async (c) => {
+  const user = await getAuthenticatedUser(c.req.header('Authorization'));
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+  const openRequestIds = await kv.get('community-support:open') || [];
+  const requests = (await Promise.all(openRequestIds.map((id: string) => kv.get(`community-support:${id}`))))
+    .filter((request) => request && request.status !== 'accepted' && request.requestedByUserId !== user.id);
+  return c.json({ requests });
+});
+
+app.post("/make-server-fd25410b/community-support/:requestId/accept", async (c) => {
+  const user = await getAuthenticatedUser(c.req.header('Authorization'));
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+  const requestId = c.req.param('requestId');
+  const request = await kv.get(`community-support:${requestId}`);
+  if (!request) return c.json({ error: "Community support request not found" }, 404);
+  if (request.requestedByUserId === user.id) return c.json({ error: "Cannot accept your own request" }, 403);
+
+  const caregiver = await getUserProfile(user.id);
+  const accepted = {
+    ...request,
+    status: 'accepted',
+    caregiverId: user.id,
+    caregiverName: caregiver?.name || 'Community caregiver',
+    caregiverPhone: await getContactPhoneForUser(user.id),
+    acceptedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+
+  await kv.set(`community-support:${requestId}`, accepted);
+  const openRequestIds = await kv.get('community-support:open') || [];
+  await kv.set('community-support:open', openRequestIds.filter((id: string) => id !== requestId));
+
+  if (accepted.requestedByUserId) {
+    await createNotification(accepted.requestedByUserId, {
+      type: 'community_assignment_accepted',
+      messageKey: 'communityAssignmentAccepted',
+      message: accepted.tasks || '',
+      time: accepted.acceptedAt,
+      severity: 'info'
+    });
+  }
+
+  return c.json({ request: accepted });
+});
+
 app.get("/make-server-fd25410b/caregiver/:caregiverId/availability", async (c) => {
   const user = await getAuthenticatedUser(c.req.header('Authorization'));
   if (!user) return c.json({ error: "Unauthorized" }, 401);
   const caregiverId = c.req.param('caregiverId');
   const availability = await kv.get(`caregiver:${caregiverId}:availability`);
   return c.json({ availability });
+});
+
+app.get("/make-server-fd25410b/caregivers/available", async (c) => {
+  const user = await getAuthenticatedUser(c.req.header('Authorization'));
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+  const availabilityRows = await kv.getByPrefix('caregiver:');
+  const availableRows = availabilityRows.filter((row) =>
+    row &&
+    typeof row === 'object' &&
+    row.available === true &&
+    row.caregiverId &&
+    row.caregiverId !== user.id
+  );
+
+  const caregivers = await Promise.all(availableRows.map(async (availability) => {
+    const profile = await getUserProfile(availability.caregiverId);
+    const location = await kv.get(`location:${availability.caregiverId}`);
+    const phoneNumber = await getContactPhoneForUser(availability.caregiverId);
+
+    return {
+      id: availability.caregiverId,
+      name: profile?.name || 'Community caregiver',
+      phoneNumber,
+      available: availability.available,
+      patientId: availability.patientId,
+      location,
+      updatedAt: availability.updatedAt
+    };
+  }));
+
+  return c.json({ caregivers });
+});
+
+app.post("/make-server-fd25410b/match-help", async (c) => {
+  const user = await getAuthenticatedUser(c.req.header('Authorization'));
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+  const { latitude, longitude, address } = await c.req.json();
+  if (!isValidCoordinate(latitude, longitude)) {
+    return c.json({ error: "Invalid requester location" }, 400);
+  }
+
+  const patientLocation = {
+    latitude: Number(latitude),
+    longitude: Number(longitude),
+    address: typeof address === 'string' && address.trim()
+      ? address.trim()
+      : await reverseGeocode(Number(latitude), Number(longitude))
+  };
+
+  const availabilityRows = await kv.getByPrefix('caregiver:');
+  const candidates = (await Promise.all(
+    availabilityRows
+      .filter((row) => row && typeof row === 'object' && row.available === true && row.caregiverId && row.caregiverId !== user.id)
+      .map(async (availability) => {
+        const caregiverLocation = await kv.get(`location:${availability.caregiverId}`);
+        if (!caregiverLocation?.latitude || !caregiverLocation?.longitude) return null;
+
+        const distanceKm = metersBetween(
+          { latitude: patientLocation.latitude, longitude: patientLocation.longitude },
+          { latitude: Number(caregiverLocation.latitude), longitude: Number(caregiverLocation.longitude) }
+        ) / 1000;
+        const caregiverProfile = await getUserProfile(availability.caregiverId);
+        const caregiverPhone = await getContactPhoneForUser(availability.caregiverId);
+
+        return {
+          availability,
+          caregiverProfile,
+          caregiverPhone,
+          caregiverLocation,
+          distanceKm
+        };
+      })
+  )).filter(Boolean).sort((a, b) => a.distanceKm - b.distanceKm);
+
+  const match = candidates[0];
+  if (!match) {
+    return c.json({ status: 'not_found', error: 'No available caregivers found' }, 404);
+  }
+
+  const request = {
+    id: crypto.randomUUID(),
+    requesterId: user.id,
+    caregiverId: match.availability.caregiverId,
+    caregiverName: match.caregiverProfile?.name || 'Community caregiver',
+    caregiverPhone: match.caregiverPhone,
+    caregiverLocation: {
+      latitude: Number(match.caregiverLocation.latitude),
+      longitude: Number(match.caregiverLocation.longitude),
+      address: match.caregiverLocation.address || ''
+    },
+    patientLocation,
+    distanceKm: match.distanceKm,
+    status: 'matched',
+    requestedAt: new Date().toISOString()
+  };
+
+  await kv.set(`help-request:${request.id}`, request);
+  return c.json({ status: 'matched', request });
 });
 
 app.post("/make-server-fd25410b/ai/sea-lion", async (c) => {
@@ -1205,12 +1433,23 @@ app.post("/make-server-fd25410b/settings", async (c) => {
   if (!user) return c.json({ error: "Unauthorized" }, 401);
   const settings = await c.req.json();
   await kv.set(`settings:${user.id}`, { ...settings, userId: user.id, updatedAt: new Date().toISOString() });
+  if (typeof settings.contactPhone === 'string') {
+    const currentProfile = await getUserProfile(user.id);
+    if (currentProfile) {
+      await kv.set(`user:${user.id}`, {
+        ...currentProfile,
+        phoneNumber: settings.contactPhone,
+        updatedAt: new Date().toISOString()
+      });
+    }
+  }
   return c.json({ success: true });
 });
 
 app.get("/make-server-fd25410b/settings", async (c) => {
   const user = await getAuthenticatedUser(c.req.header('Authorization'));
   if (!user) return c.json({ error: "Unauthorized" }, 401);
+  const profile = await getUserProfile(user.id);
   const settings = await kv.get(`settings:${user.id}`) || {
     language: 'en-sg',
     notifications: true,
@@ -1219,8 +1458,12 @@ app.get("/make-server-fd25410b/settings", async (c) => {
     fontSize: 'Medium',
     emergencyContact: '',
     emergencyPhone: '',
+    contactPhone: profile?.phoneNumber || '',
     homeAddress: ''
   };
+  if (!settings.contactPhone && profile?.phoneNumber) {
+    settings.contactPhone = profile.phoneNumber;
+  }
   return c.json({ settings });
 });
 

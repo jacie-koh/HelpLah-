@@ -11,6 +11,7 @@ import { LanguageContext } from '../App';
 import { getTranslation } from '../utils/translations';
 import { useDynamicTranslations } from '../utils/dynamicTranslations';
 import { recordSpeechToText, speakText } from '../utils/voice';
+import { callPhoneNumber, phoneHref } from '../utils/phone';
 
 const patientMapIcon = L.divIcon({
   className: '',
@@ -39,6 +40,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
   const [voiceNotes, setVoiceNotes] = useState([]);
   const [vitals, setVitals] = useState([]);
   const [caregiverStressScore, setCaregiverStressScore] = useState(null);
+  const [latestAssessmentAt, setLatestAssessmentAt] = useState(null);
   const [showTaskManager, setShowTaskManager] = useState(false);
   const [showMyTaskManager, setShowMyTaskManager] = useState(false);
   const [showCommunitySupportScheduler, setShowCommunitySupportScheduler] = useState(false);
@@ -48,10 +50,12 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
   const [searchingForCaregiver, setSearchingForCaregiver] = useState(false);
   const [showLocationMap, setShowLocationMap] = useState(false);
   const [patientLocation, setPatientLocation] = useState(null);
+  const [patientContactPhone, setPatientContactPhone] = useState('');
   const [availableCaregivers, setAvailableCaregivers] = useState([]);
   const [requestLocation, setRequestLocation] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [activeView, setActiveView] = useState('home');
+  const [showDistressThermometerInfo, setShowDistressThermometerInfo] = useState(false);
   const [isRecordingNote, setIsRecordingNote] = useState(false);
   const [newCommunityNoteText, setNewCommunityNoteText] = useState('');
   const [isRecordingNewCommunityNote, setIsRecordingNewCommunityNote] = useState(false);
@@ -113,6 +117,13 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (user?.id && accessToken) {
+      loadNotifications();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [caregiverStressScore, latestAssessmentAt]);
 
   useEffect(() => {
     if (activeView !== 'community' || !user?.id || !accessToken) {
@@ -208,6 +219,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
         const data = await response.json();
         if (data.patientId) {
           setPatientId(data.patientId);
+          setPatientContactPhone(data.patient?.phoneNumber || '');
           loadPatientData(data.patientId);
         }
       }
@@ -253,11 +265,19 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
   }
 
   async function loadCommunitySupport() {
-    // Load scheduled community support sessions (for planning ahead)
-    setCommunitySupport([
-      { id: 1, caregiverName: 'Maria Wong', caregiverId: 'community_demo_1', requestedByUserId: user.id, date: '2026-05-10', time: '14:00', duration: '2 hours', status: 'accepted', tasks: 'Accompany to doctor appointment' },
-      { id: 2, caregiverName: null, caregiverId: null, requestedByUserId: user.id, date: '2026-05-12', time: '10:00', duration: '3 hours', status: 'pending', tasks: 'Help with grocery shopping' }
-    ]);
+    try {
+      const response = await fetch(
+        `${supabaseFunctionsApiBase}/community-support`,
+        { headers: { 'Authorization': `Bearer ${accessToken}` } }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        setCommunitySupport(data.requests || []);
+      }
+    } catch (error) {
+      console.log('Error loading community support:', error);
+    }
   }
 
   async function loadCaregiverStressScore() {
@@ -270,6 +290,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
       if (response.ok) {
         const data = await response.json();
         setCaregiverStressScore(typeof data.score === 'number' ? data.score : null);
+        setLatestAssessmentAt(data.latestAssessment?.createdAt || null);
       }
     } catch (error) {
       console.log('Error loading caregiver stress score:', error);
@@ -285,7 +306,32 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
 
       if (response.ok) {
         const data = await response.json();
-        setNotifications(data.notifications || []);
+        const serverNotifications = data.notifications || [];
+        const localNotifications = [];
+        const now = Date.now();
+        const assessmentAgeMs = latestAssessmentAt ? now - new Date(latestAssessmentAt).getTime() : Infinity;
+
+        if (caregiverStressScore !== null && caregiverStressScore >= 29) {
+          localNotifications.push({
+            id: 'local-mental-health-resources',
+            type: 'mental_health_resources',
+            messageKey: 'mentalHealthResourcePrompt',
+            time: new Date().toISOString(),
+            severity: 'info'
+          });
+        }
+
+        if (assessmentAgeMs >= 14 * 24 * 60 * 60 * 1000) {
+          localNotifications.push({
+            id: 'local-biweekly-assessment',
+            type: 'caregiver_assessment_due',
+            messageKey: 'biweeklyAssessmentPrompt',
+            time: new Date().toISOString(),
+            severity: 'info'
+          });
+        }
+
+        setNotifications([...localNotifications, ...serverNotifications]);
       }
     } catch (error) {
       console.log('Error loading notifications:', error);
@@ -649,12 +695,11 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
   }
 
   function handleCallCaregiver() {
-    if (!immediateHelpRequest?.caregiverPhone) {
-      return;
-    }
+    callPhoneNumber(immediateHelpRequest?.caregiverPhone);
+  }
 
-    const tel = immediateHelpRequest.caregiverPhone.replace(/[^+0-9]/g, '');
-    window.location.href = `tel:${tel}`;
+  function handleCallPatient() {
+    callPhoneNumber(patientContactPhone);
   }
 
   async function handleCheckLocation(notification) {
@@ -777,17 +822,17 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
   }
 
   return (
-    <div className="size-full bg-white flex flex-col">
+    <div className="size-full isomer-app-shell flex flex-col">
       {/* Top Bar */}
-      <div className="text-white px-4 py-3 flex items-center justify-between shadow-md" style={{ background: '#4A9EFF' }}>
+      <div className="relative isomer-topbar px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <LayoutGrid className="w-6 h-6" />
-          <h1 className="text-xl font-bold">{t('brandName')}</h1>
         </div>
+        <h1 className="absolute left-1/2 -translate-x-1/2 text-xl font-bold">{t('brandName')}</h1>
         <div className="flex items-center gap-3">
           <button
             onClick={() => setActiveView('notifications')}
-            className="relative p-2 hover:bg-white/20 rounded-full transition-colors"
+            className="relative p-2 hover:bg-blue-50 rounded-full transition-colors"
           >
             <Bell className="w-6 h-6" />
             {visibleNotifications.length > 0 && (
@@ -798,7 +843,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
           </button>
           <button
             onClick={() => navigate('/settings')}
-            className="p-2 hover:bg-white/20 rounded-full transition-colors"
+            className="p-2 hover:bg-blue-50 rounded-full transition-colors"
           >
             <Settings className="w-6 h-6" />
           </button>
@@ -818,7 +863,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                 onClick={() => setActiveView('community')}
                 className="bg-white border-2 border-gray-200 rounded-2xl p-6 flex flex-col items-center gap-3 hover:border-purple-400 hover:shadow-lg transition-all active:scale-95"
               >
-                <Users className="w-12 h-12 text-purple-600" />
+                <Users className="w-12 h-12 text-blue-700" />
                 <span className="text-sm font-semibold text-gray-800 text-center">{t('communitySupport')}</span>
               </button>
 
@@ -842,40 +887,73 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
 
             {(() => {
               const stressLevel = getCaregiverStressLevel(caregiverStressScore);
+              const distressThermometerText = [
+                t('caregiverStressThermometer'),
+                t('distressThermometerDescription'),
+                t(stressLevel.levelKey),
+                t(stressLevel.messageKey)
+              ].join('. ');
+
               return (
-                <div className="mb-6 rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <Thermometer className={`h-5 w-5 ${stressLevel.colorClass}`} />
-                      <span className="truncate text-sm font-bold text-gray-800">{t('caregiverStressThermometer')}</span>
+                <div className="mb-6 rounded-2xl border border-gray-200 bg-white shadow-sm">
+                  <button
+                    onClick={() => setShowDistressThermometerInfo((current) => !current)}
+                    className="w-full px-4 py-3 text-left"
+                  >
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <Thermometer className={`h-5 w-5 ${stressLevel.colorClass}`} />
+                        <span className="truncate text-sm font-bold text-gray-800">{t('caregiverStressThermometer')}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold ${stressLevel.colorClass} ${stressLevel.bgClass}`}>
+                          {stressLevel.label}
+                        </span>
+                        <span className="shrink-0 rounded-full px-3 py-1 text-xs font-semibold text-gray-700 bg-gray-100 border border-gray-200">
+                          {caregiverStressScore === null || caregiverStressScore === undefined
+                            ? t('assessmentPendingShort')
+                            : t('assessmentScoreOutOf', { score: caregiverStressScore, total: 48 })}
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold ${stressLevel.colorClass} ${stressLevel.bgClass}`}>
-                        {stressLevel.label}
-                      </span>
-                      <span className="shrink-0 rounded-full px-3 py-1 text-xs font-semibold text-gray-700 bg-gray-100 border border-gray-200">
-                        {caregiverStressScore === null || caregiverStressScore === undefined
-                          ? t('assessmentPendingShort')
-                          : t('assessmentScoreOutOf', { score: caregiverStressScore, total: 48 })}
-                      </span>
+                    <div className="relative h-3 overflow-hidden rounded-full bg-gray-100">
+                      <div className="absolute inset-y-0 left-0 w-[23%] bg-green-500" />
+                      <div className="absolute inset-y-0 left-[23%] w-[19%] bg-yellow-400" />
+                      <div className="absolute inset-y-0 left-[42%] right-0 bg-red-500" />
+                      {caregiverStressScore !== null && caregiverStressScore !== undefined && (
+                        <div
+                          className="absolute top-1/2 h-6 w-1.5 -translate-y-1/2 rounded-full bg-gray-900 shadow"
+                          style={{ left: `calc(${stressLevel.markerPercent}% - 3px)` }}
+                        />
+                      )}
                     </div>
-                  </div>
-                  <div className="relative h-3 overflow-hidden rounded-full bg-gray-100">
-                    <div className="absolute inset-y-0 left-0 w-[23%] bg-green-500" />
-                    <div className="absolute inset-y-0 left-[23%] w-[19%] bg-yellow-400" />
-                    <div className="absolute inset-y-0 left-[42%] right-0 bg-red-500" />
-                    {caregiverStressScore !== null && caregiverStressScore !== undefined && (
-                      <div
-                        className="absolute top-1/2 h-6 w-1.5 -translate-y-1/2 rounded-full bg-gray-900 shadow"
-                        style={{ left: `calc(${stressLevel.markerPercent}% - 3px)` }}
-                      />
-                    )}
-                  </div>
-                  <div className="mt-2 flex justify-between text-[11px] font-semibold text-gray-500">
-                    <span>{t('burdenLowTitle')}</span>
-                    <span>{t('burdenMidTitle')}</span>
-                    <span>{t('burdenHighTitle')}</span>
-                  </div>
+                    <div className="mt-2 flex justify-between text-[11px] font-semibold text-gray-500">
+                      <span>{t('burdenLowTitle')}</span>
+                      <span>{t('burdenMidTitle')}</span>
+                      <span>{t('burdenHighTitle')}</span>
+                    </div>
+                  </button>
+
+                  {showDistressThermometerInfo && (
+                    <div className={`border-t px-4 py-4 ${stressLevel.bgClass} ${stressLevel.borderClass}`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-gray-900">{t('distressThermometerWhatItMeans')}</p>
+                          <p className="mt-1 text-sm text-gray-700">{t('distressThermometerDescription')}</p>
+                          <p className={`mt-3 text-sm font-semibold ${stressLevel.colorClass}`}>{t(stressLevel.levelKey)}</p>
+                          <p className="mt-1 text-sm text-gray-700">{t(stressLevel.messageKey)}</p>
+                        </div>
+                        <button
+                          onClick={() => handleTextToSpeech(distressThermometerText)}
+                          disabled={!accessibilitySettings.textToSpeech}
+                          className="shrink-0 rounded-xl bg-white p-2 text-blue-600 shadow-sm hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                          title={t('tooltipReadAloud')}
+                        >
+                          <Volume2 className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })()}
@@ -1061,7 +1139,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
             <div className="bg-white rounded-2xl border-2 border-gray-200 overflow-hidden">
               <div className="bg-purple-50 px-4 py-3 flex items-center justify-between border-b-2 border-purple-200">
                 <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                  <Calendar className="w-5 h-5 text-purple-600" />
+                  <Calendar className="w-5 h-5 text-blue-700" />
                   {t('scheduledSupport')}
                 </h3>
                 <button
@@ -1078,7 +1156,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                   <p className="text-gray-500 mb-4">{t('noCommunitySupport')}</p>
                   <button
                     onClick={() => setShowCommunitySupportScheduler(true)}
-                    className="px-6 py-3 bg-purple-600 text-white rounded-xl font-semibold hover:bg-purple-700 transition-colors inline-flex items-center gap-2"
+                    className="px-6 py-3 bg-blue-700 text-white rounded-xl font-semibold hover:bg-blue-800 transition-colors inline-flex items-center gap-2"
                   >
                     <Plus className="w-5 h-5" />
                     {t('scheduleCommunitySupport')}
@@ -1096,7 +1174,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                           <div className="flex items-center gap-3 mb-2">
                             {hasAssignedVolunteer(session) ? (
                               <>
-                                <Users className="w-5 h-5 text-purple-600" />
+                                <Users className="w-5 h-5 text-blue-700" />
                                 <span className="text-base font-semibold text-gray-800">{session.caregiverName}</span>
                                 <span className="text-xs px-2 py-1 rounded-full font-semibold bg-green-100 text-green-700">
                                   {dt('Volunteer assigned')}
@@ -1274,7 +1352,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                 {/* Request Button */}
                 <button
                   onClick={handleRequestImmediateHelp}
-                  className="w-full bg-gradient-to-r from-purple-600 to-purple-700 text-white py-5 rounded-3xl font-bold text-xl hover:from-purple-700 hover:to-purple-800 transition-all active:scale-95 shadow-xl flex items-center justify-center gap-3"
+                  className="w-full bg-blue-700 text-white py-5 rounded-3xl font-bold text-xl hover:bg-blue-800 transition-all active:scale-95 shadow-xl flex items-center justify-center gap-3"
                 >
                   <Users className="w-8 h-8" />
                   {t('requestHelpNow')}
@@ -1395,7 +1473,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                       <p className="text-gray-600 mb-6">{immediateHelpRequest.failureReason || 'Please try again later or refresh the app.'}</p>
                       <button
                         onClick={handleCancelRequest}
-                        className="w-full bg-purple-600 text-white py-4 rounded-2xl font-semibold hover:bg-purple-700 transition-colors"
+                        className="w-full bg-blue-700 text-white py-4 rounded-2xl font-semibold hover:bg-blue-800 transition-colors"
                       >
                         Try again
                       </button>
@@ -1614,7 +1692,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
             <div className="space-y-4">
               <div className="bg-white border-2 border-gray-200 rounded-2xl p-5">
                 <div className="flex items-center gap-3 mb-4">
-                  <BookOpen className="w-7 h-7 text-purple-600" />
+                  <BookOpen className="w-7 h-7 text-blue-700" />
                   <h3 className="text-lg font-bold text-gray-800">{t('resourcesSupport')}</h3>
                 </div>
                 <p className="text-gray-600 mb-4">{t('resourceQuickLinks')}</p>
@@ -1639,17 +1717,35 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
 
               <div className="bg-white border-2 border-gray-200 rounded-2xl p-5">
                 <div className="flex items-center gap-3 mb-4">
-                  <Bell className="w-7 h-7 text-purple-600" />
+                  <Bell className="w-7 h-7 text-blue-700" />
                   <h3 className="text-lg font-bold text-gray-800">{t('helplineContacts')}</h3>
                 </div>
                 <div className="space-y-3 text-gray-700">
-                  <div className="rounded-xl border border-gray-200 p-4 bg-slate-50">
-                    <p className="font-semibold">{dt('Club Heal')}</p>
-                    <p>6899 3463</p>
+                  <div className="rounded-xl border border-gray-200 p-4 bg-slate-50 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-semibold">{dt('Club Heal')}</p>
+                      <p>6899 3463</p>
+                    </div>
+                    <a
+                      href={phoneHref('6899 3463')}
+                      className="shrink-0 rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 transition flex items-center gap-2"
+                    >
+                      <Phone className="w-4 h-4" />
+                      {t('call')}
+                    </a>
                   </div>
-                  <div className="rounded-xl border border-gray-200 p-4 bg-slate-50">
-                    <p className="font-semibold">{dt('Mindful Community')}</p>
-                    <p>6460 4400</p>
+                  <div className="rounded-xl border border-gray-200 p-4 bg-slate-50 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-semibold">{dt('Mindful Community')}</p>
+                      <p>6460 4400</p>
+                    </div>
+                    <a
+                      href={phoneHref('6460 4400')}
+                      className="shrink-0 rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 transition flex items-center gap-2"
+                    >
+                      <Phone className="w-4 h-4" />
+                      {t('call')}
+                    </a>
                   </div>
                 </div>
               </div>
@@ -1735,7 +1831,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
               {/* Community Support - Immediate */}
               <div className="bg-purple-50 border-2 border-purple-200 rounded-2xl p-4">
                 <div className="flex items-start gap-3">
-                  <Users className="w-8 h-8 flex-shrink-0 text-purple-600" />
+                  <Users className="w-8 h-8 flex-shrink-0 text-blue-700" />
                   <div>
                     <h3 className="text-lg font-bold text-gray-800 mb-2">{t('requestHelpNow')}</h3>
                     <p className="text-gray-700 text-sm mb-2">{t('helpImmediateBody')}</p>
@@ -1751,7 +1847,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
               {/* Scheduled Support */}
               <div className="bg-white border-2 border-gray-200 rounded-2xl p-4">
                 <div className="flex items-start gap-3">
-                  <Calendar className="w-8 h-8 flex-shrink-0 text-purple-600" />
+                  <Calendar className="w-8 h-8 flex-shrink-0 text-blue-700" />
                   <div>
                     <h3 className="text-lg font-bold text-gray-800 mb-2">{t('scheduledSupport')}</h3>
                     <p className="text-gray-700 text-sm">{t('helpScheduledBody')}</p>
@@ -1956,10 +2052,18 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
               </div>
             </div>
 
-            <div>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={handleCallPatient}
+                disabled={!patientContactPhone}
+                className="w-full bg-emerald-600 text-white py-4 rounded-2xl font-semibold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Phone className="w-5 h-5" />
+                {t('callPatient')}
+              </button>
               <button
                 onClick={handleNavigateToPatientLocation}
-                className="w-full bg-purple-600 text-white py-4 rounded-2xl font-semibold hover:bg-purple-700 transition-colors flex items-center justify-center gap-2"
+                className="w-full bg-blue-700 text-white py-4 rounded-2xl font-semibold hover:bg-blue-800 transition-colors flex items-center justify-center gap-2"
               >
                 <MapPin className="w-5 h-5" />
                 {t('navigate')}

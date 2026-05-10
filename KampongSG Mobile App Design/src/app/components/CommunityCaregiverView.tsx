@@ -1,11 +1,12 @@
 import { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Settings, MapPin, Users, CheckCircle, Bell, LayoutGrid, Home, FileText, BookOpen, Calendar, MessageCircle, Mic } from 'lucide-react';
+import { Settings, MapPin, Users, CheckCircle, Bell, LayoutGrid, Home, FileText, BookOpen, Calendar, MessageCircle, Mic, Phone } from 'lucide-react';
 import { supabaseFunctionsApiBase } from '../../../utils/supabase/api';
 import { LanguageContext } from '../App';
 import { getTranslation } from '../utils/translations';
 import { useDynamicTranslations } from '../utils/dynamicTranslations';
 import { recordSpeechToText } from '../utils/voice';
+import { phoneHref } from '../utils/phone';
 
 export function CommunityCaregiverView({ user, profile, accessToken }) {
   const [isAvailable, setIsAvailable] = useState(false);
@@ -384,6 +385,51 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
         status: 'open'
       }
     ]);
+
+    await loadOpenCommunitySupportRequests();
+  }
+
+  async function loadOpenCommunitySupportRequests() {
+    if (!accessToken) return;
+
+    try {
+      const response = await fetch(
+        `${supabaseFunctionsApiBase}/community-support/open`,
+        { headers: { 'Authorization': `Bearer ${accessToken}` } }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        const openAssignments = (data.requests || []).map((request) => {
+          const assignmentDate = request.date ? new Date(`${request.date}T00:00:00`) : new Date();
+          const startTime = request.time || '09:00';
+          const [startHour = '9', startMinute = '0'] = startTime.split(':');
+          const end = new Date(assignmentDate);
+          end.setHours(Number(startHour), Number(startMinute), 0, 0);
+          end.setHours(end.getHours() + Math.max(1, Number(String(request.duration || '1').match(/\d+/)?.[0] || 1)));
+
+          return {
+            id: request.id,
+            patientId: request.patientId || request.id,
+            date: assignmentDate,
+            startTime,
+            endTime: `${String(end.getHours()).padStart(2, '0')}:${String(end.getMinutes()).padStart(2, '0')}`,
+            patientName: request.patientName || t('patient'),
+            task: request.tasks || t('requestCommunitySupport'),
+            location: request.location || request.address || '',
+            status: request.status === 'accepted' ? 'accepted' : 'open',
+            source: 'backend'
+          };
+        });
+
+        setAvailableAssignments((current) => {
+          const demoAssignments = current.filter((assignment) => assignment.source !== 'backend');
+          return [...demoAssignments, ...openAssignments];
+        });
+      }
+    } catch (error) {
+      console.log('Error loading open community support requests:', error);
+    }
   }
 
   async function toggleAvailability() {
@@ -585,11 +631,19 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
       message: `${openAssignmentCount} new assignments available for the next week.`
     }] : [];
 
+    const incentiveMessages = [
+      t('volunteerStreak'),
+      t('volunteerIncentive2'),
+      t('volunteerIncentive3'),
+      t('volunteerIncentive4'),
+      t('volunteerIncentive5')
+    ];
+    const dayIndex = Math.floor(Date.now() / (24 * 60 * 60 * 1000)) % incentiveMessages.length;
     const incentiveAlerts = [{
       type: 'incentive',
       id: 'daily_incentive',
       title: 'Daily community boost',
-      message: t('volunteerStreak')
+      message: incentiveMessages[dayIndex]
     }];
 
     return [...lostPatientAlerts, ...patientHelpAlerts, ...assignmentDropAlert, ...incentiveAlerts];
@@ -752,7 +806,24 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
     );
   }
 
-  function handleTakeAssignment(assignmentId) {
+  async function handleTakeAssignment(assignmentId) {
+    const assignment = availableAssignments.find((item) => item.id === assignmentId);
+    if (assignment?.source === 'backend') {
+      try {
+        const response = await fetch(
+          `${supabaseFunctionsApiBase}/community-support/${assignmentId}/accept`,
+          {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${accessToken}` }
+          }
+        );
+
+        if (!response.ok) throw new Error('Failed to accept assignment');
+      } catch (error) {
+        console.log('Error accepting community support assignment:', error);
+      }
+    }
+
     setAvailableAssignments((prevAssignments) =>
       prevAssignments.map((assignment) =>
         assignment.id === assignmentId ? { ...assignment, status: 'accepted' } : assignment
@@ -805,17 +876,17 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
   }
 
   return (
-    <div className="size-full bg-white flex flex-col">
+    <div className="size-full isomer-app-shell flex flex-col">
       {/* Top Bar */}
-      <div className="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-4 py-3 flex items-center justify-between shadow-md">
+      <div className="relative isomer-topbar px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <LayoutGrid className="w-6 h-6" />
-          <h1 className="text-xl font-bold">{t('brandName')}</h1>
         </div>
+        <h1 className="absolute left-1/2 -translate-x-1/2 text-xl font-bold">{t('brandName')}</h1>
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate('/settings')}
-            className="p-2 hover:bg-white/20 rounded-full transition-colors"
+            className="p-2 hover:bg-blue-50 rounded-full transition-colors"
           >
             <Settings className="w-6 h-6" />
           </button>
@@ -925,7 +996,7 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
                             {assignment.status === 'open' ? (
                               <button
                                 onClick={() => handleTakeAssignment(assignment.id)}
-                                className="w-full bg-purple-600 text-white rounded-xl py-2 text-sm font-semibold hover:bg-purple-700 transition"
+                                className="w-full bg-blue-700 text-white rounded-xl py-2 text-sm font-semibold hover:bg-blue-800 transition"
                               >
                                 {t('add')}
                               </button>
@@ -1055,7 +1126,7 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
               <div className="grid gap-4">
                 <div className="bg-white border-2 border-gray-200 rounded-2xl p-5">
                   <div className="flex items-center gap-3 mb-4">
-                    <BookOpen className="w-7 h-7 text-purple-600" />
+                    <BookOpen className="w-7 h-7 text-blue-700" />
                     <h3 className="text-lg font-bold text-gray-800">{t('resourcesSupport')}</h3>
                   </div>
                   <p className="text-gray-600 mb-3">{t('resourceQuickLinks')}</p>
@@ -1068,30 +1139,48 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
 
                 <div className="bg-white border-2 border-gray-200 rounded-2xl p-5">
                   <div className="flex items-center gap-3 mb-4">
-                    <Bell className="w-7 h-7 text-purple-600" />
+                    <Bell className="w-7 h-7 text-blue-700" />
                     <h3 className="text-lg font-bold text-gray-800">{t('helplineContacts')}</h3>
                   </div>
                   <div className="space-y-3 text-gray-700">
-                    <div className="rounded-xl border border-gray-200 p-4 bg-slate-50">
-                      <p className="font-semibold">{dt('Club Heal')}</p>
-                      <p>6899 3463</p>
+                    <div className="rounded-xl border border-gray-200 p-4 bg-slate-50 flex items-center justify-between gap-3">
+                      <div>
+                        <p className="font-semibold">{dt('Club Heal')}</p>
+                        <p>6899 3463</p>
+                      </div>
+                      <a
+                        href={phoneHref('6899 3463')}
+                        className="shrink-0 rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 transition flex items-center gap-2"
+                      >
+                        <Phone className="w-4 h-4" />
+                        {t('call')}
+                      </a>
                     </div>
-                    <div className="rounded-xl border border-gray-200 p-4 bg-slate-50">
-                      <p className="font-semibold">{dt('Mindful Community')}</p>
-                      <p>6460 4400</p>
+                    <div className="rounded-xl border border-gray-200 p-4 bg-slate-50 flex items-center justify-between gap-3">
+                      <div>
+                        <p className="font-semibold">{dt('Mindful Community')}</p>
+                        <p>6460 4400</p>
+                      </div>
+                      <a
+                        href={phoneHref('6460 4400')}
+                        className="shrink-0 rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 transition flex items-center gap-2"
+                      >
+                        <Phone className="w-4 h-4" />
+                        {t('call')}
+                      </a>
                     </div>
                   </div>
                 </div>
 
                 <div className="bg-white border-2 border-gray-200 rounded-2xl p-5">
                   <div className="flex items-center gap-3 mb-4">
-                    <MessageCircle className="w-7 h-7 text-purple-600" />
+                    <MessageCircle className="w-7 h-7 text-blue-700" />
                     <h3 className="text-lg font-bold text-gray-800">{dt('SEA Lion Chatbot')}</h3>
                   </div>
                   <p className="text-gray-600 mb-3">{t('chatbotDescription')}</p>
                   <button
                     onClick={openChatbot}
-                    className="w-full bg-purple-600 text-white rounded-xl py-3 text-sm font-semibold hover:bg-purple-700 transition"
+                    className="w-full bg-blue-700 text-white rounded-xl py-3 text-sm font-semibold hover:bg-blue-800 transition"
                   >
                     {t('openChatbot')}
                   </button>
@@ -1268,7 +1357,7 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
         <button
           onClick={() => setActiveView('home')}
           className={`flex flex-col items-center gap-1 px-4 py-2 rounded-lg transition-colors ${
-            activeView === 'home' ? 'text-purple-600' : 'text-gray-600'
+            activeView === 'home' ? 'text-blue-700' : 'text-gray-600'
           }`}
         >
           <Home className="w-6 h-6" />
@@ -1277,7 +1366,7 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
         <button
           onClick={() => setActiveView('resources')}
           className={`flex flex-col items-center gap-1 px-4 py-2 rounded-lg transition-colors ${
-            activeView === 'resources' ? 'text-purple-600' : 'text-gray-600'
+            activeView === 'resources' ? 'text-blue-700' : 'text-gray-600'
           }`}
         >
           <BookOpen className="w-6 h-6" />
@@ -1286,7 +1375,7 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
         <button
           onClick={() => setActiveView('notes')}
           className={`flex flex-col items-center gap-1 px-4 py-2 rounded-lg transition-colors ${
-            activeView === 'notes' ? 'text-purple-600' : 'text-gray-600'
+            activeView === 'notes' ? 'text-blue-700' : 'text-gray-600'
           }`}
         >
           <FileText className="w-6 h-6" />
@@ -1295,7 +1384,7 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
         <button
           onClick={() => setActiveView('notifications')}
           className={`flex flex-col items-center gap-1 px-4 py-2 rounded-lg transition-colors ${
-            activeView === 'notifications' ? 'text-purple-600' : 'text-gray-600'
+            activeView === 'notifications' ? 'text-blue-700' : 'text-gray-600'
           }`}
         >
           <Bell className="w-6 h-6" />

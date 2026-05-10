@@ -5,6 +5,7 @@ import { supabaseFunctionsApiBase } from '../../../utils/supabase/api';
 import { LanguageContext } from '../App';
 import { getTranslation } from '../utils/translations';
 import { useDynamicTranslations } from '../utils/dynamicTranslations';
+import { notifyInBrowser } from '../utils/notifications';
 
 export function PatientView({ user, profile, accessToken }) {
   const [tasks, setTasks] = useState([]);
@@ -12,6 +13,7 @@ export function PatientView({ user, profile, accessToken }) {
   const [geofence, setGeofence] = useState(null);
   const [isHome, setIsHome] = useState(true);
   const lastReverseGeocodeRef = useRef(null);
+  const reminderTimersRef = useRef([]);
   const navigate = useNavigate();
   const { language, accessibilitySettings } = useContext(LanguageContext);
   const t = (key: string, vars?: Record<string, string | number>) =>
@@ -29,6 +31,41 @@ export function PatientView({ user, profile, accessToken }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    reminderTimersRef.current.forEach((timerId) => clearTimeout(timerId));
+    reminderTimersRef.current = [];
+
+    if (!accessibilitySettings.notifications) return;
+
+    const reminderCount = Math.max(0, Math.min(5, Number(accessibilitySettings.taskReminderCount ?? 2)));
+    if (reminderCount === 0) return;
+
+    const now = new Date();
+    const todayTasks = tasks.filter((task) => !task.completedAt && task.time);
+    todayTasks.forEach((task) => {
+      const [hours, minutes] = String(task.time).split(':');
+      const dueAt = new Date();
+      dueAt.setHours(Number(hours), Number(minutes || 0), 0, 0);
+
+      for (let index = 0; index < reminderCount; index += 1) {
+        const reminderAt = new Date(dueAt.getTime() + index * 5 * 60 * 1000);
+        const delay = reminderAt.getTime() - now.getTime();
+        if (delay < 0 || delay > 24 * 60 * 60 * 1000) continue;
+
+        const timerId = window.setTimeout(() => {
+          notifyInBrowser(t('taskReminderTitle'), dt(task.title));
+        }, delay);
+        reminderTimersRef.current.push(timerId);
+      }
+    });
+
+    return () => {
+      reminderTimersRef.current.forEach((timerId) => clearTimeout(timerId));
+      reminderTimersRef.current = [];
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasks, accessibilitySettings.notifications, accessibilitySettings.taskReminderCount, language]);
 
   async function loadTasks() {
     try {
@@ -221,13 +258,13 @@ export function PatientView({ user, profile, accessToken }) {
     : t('calculatingDistance');
 
   return (
-    <div className="size-full bg-slate-50 flex flex-col">
+    <div className="size-full isomer-app-shell flex flex-col">
       {/* Top Bar */}
-      <div className="bg-white text-gray-900 px-4 py-3 flex items-center justify-between border-b border-gray-200">
+      <div className="relative isomer-topbar px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <LayoutGrid className="w-6 h-6 text-blue-600" />
-          <h1 className="text-xl font-bold">{t('brandName')}</h1>
         </div>
+        <h1 className="absolute left-1/2 -translate-x-1/2 text-xl font-bold">{t('brandName')}</h1>
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate('/settings')}
