@@ -118,6 +118,17 @@ export function PatientView({ user, profile, accessToken }) {
   }
 
   async function completeTask(taskId) {
+    const completedAt = new Date().toISOString();
+    setTasks((currentTasks) =>
+      currentTasks.map((task) =>
+        task.id === taskId ? { ...task, completedAt, status: 'completed' } : task
+      )
+    );
+
+    if (String(taskId).startsWith('patient-demo-')) {
+      return;
+    }
+
     try {
       const response = await fetch(
         `${supabaseFunctionsApiBase}/tasks/${taskId}/complete`,
@@ -379,9 +390,12 @@ export function PatientView({ user, profile, accessToken }) {
                   >
                     <button
                       onClick={() => completeTask(task.id)}
-                      className="flex-shrink-0 w-16 h-16 border-4 border-blue-600 rounded-full hover:bg-blue-50 transition-colors active:scale-95"
+                      className="flex-shrink-0 w-16 h-16 border-4 border-blue-600 rounded-full hover:bg-blue-50 transition-colors active:scale-95 flex items-center justify-center text-blue-700"
                       title={t('tooltipMarkDone')}
-                    />
+                      aria-label={t('tooltipMarkDone')}
+                    >
+                      <CheckCircle className="h-8 w-8" />
+                    </button>
 
                     <div className="flex-1">
                       <h4 className="text-xl font-bold text-gray-800">{dt(task.title)}</h4>

@@ -82,6 +82,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
       immediateHelpRequest?.location,
       immediateHelpRequest?.caregiverDistance,
       immediateHelpRequest?.estimatedArrival,
+      immediateHelpRequest?.caregiverLocationLabel,
       'Accepted',
       'Pending',
       'Notifications are turned off in Settings.',
@@ -275,39 +276,115 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
     ];
   }
 
-  function demoAvailableCaregivers() {
-    return [
+  function toRad(value) {
+    return Number(value) * Math.PI / 180;
+  }
+
+  function metersBetweenPoints(start, end) {
+    if (!start?.latitude || !start?.longitude || !end?.latitude || !end?.longitude) {
+      return null;
+    }
+
+    const earthRadius = 6371000;
+    const dLat = toRad(Number(end.latitude) - Number(start.latitude));
+    const dLon = toRad(Number(end.longitude) - Number(start.longitude));
+    const lat1 = toRad(Number(start.latitude));
+    const lat2 = toRad(Number(end.latitude));
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+
+    return earthRadius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  function formatDistanceLabel(meters) {
+    if (meters == null) return '';
+    if (meters < 1000) return `${Math.max(1, Math.round(meters / 10) * 10)} m away`;
+    return `${(meters / 1000).toFixed(1)} km away`;
+  }
+
+  function estimateArrivalLabel(meters) {
+    if (meters == null) return '';
+    return `${Math.max(3, Math.round((meters / 1000) * 4))} mins`;
+  }
+
+  function pointFromLocation(location) {
+    if (!location?.latitude || !location?.longitude) return null;
+    return {
+      latitude: Number(location.latitude),
+      longitude: Number(location.longitude)
+    };
+  }
+
+  function demoAvailableCaregivers(referenceLocation = demoPatientLocation()) {
+    const reference = pointFromLocation(referenceLocation) || pointFromLocation(demoPatientLocation());
+    const caregiverSeeds = [
       {
         id: 'demo-caregiver-mei',
         name: 'Mei Ling',
         phoneNumber: '+65 8456 7890',
-        distanceLabel: '700 m away',
-        estimatedArrival: '8 mins',
-        latitude: 1.3536,
-        longitude: 103.9452,
-        location: { latitude: 1.3536, longitude: 103.9452, address: 'Tampines Street 83' }
+        latitude: reference.latitude + 0.0042,
+        longitude: reference.longitude + 0.0046,
+        address: 'Current volunteer location'
       },
       {
         id: 'demo-caregiver-rashid',
         name: 'Rashid',
         phoneNumber: '+65 8567 8901',
-        distanceLabel: '1.2 km away',
-        estimatedArrival: '12 mins',
-        latitude: 1.3499,
-        longitude: 103.9431,
-        location: { latitude: 1.3499, longitude: 103.9431, address: 'Tampines Avenue 5' }
+        latitude: reference.latitude - 0.0064,
+        longitude: reference.longitude + 0.0081,
+        address: 'Current volunteer location'
       },
       {
         id: 'demo-caregiver-siti',
         name: 'Siti',
         phoneNumber: '+65 8678 9012',
-        distanceLabel: '1.8 km away',
-        estimatedArrival: '16 mins',
-        latitude: 1.3563,
-        longitude: 103.9495,
-        location: { latitude: 1.3563, longitude: 103.9495, address: 'Tampines Central' }
+        latitude: reference.latitude + 0.0092,
+        longitude: reference.longitude - 0.0068,
+        address: 'Current volunteer location'
       }
     ];
+
+    return caregiverSeeds.map((caregiver) => {
+      const caregiverPoint = { latitude: caregiver.latitude, longitude: caregiver.longitude };
+      const meters = metersBetweenPoints(reference, caregiverPoint);
+      return {
+        ...caregiver,
+        distanceMeters: meters,
+        distanceLabel: formatDistanceLabel(meters),
+        estimatedArrival: estimateArrivalLabel(meters),
+        location: {
+          latitude: caregiver.latitude,
+          longitude: caregiver.longitude,
+          address: caregiver.address
+        }
+      };
+    });
+  }
+
+  function normalizeCaregiverLocation(caregiver, referenceLocation = requestLocation) {
+    const latitude = Number(caregiver.latitude ?? caregiver.location?.latitude);
+    const longitude = Number(caregiver.longitude ?? caregiver.location?.longitude);
+    const reference = pointFromLocation(referenceLocation);
+    const caregiverPoint = Number.isFinite(latitude) && Number.isFinite(longitude)
+      ? { latitude, longitude }
+      : null;
+    const meters = reference && caregiverPoint ? metersBetweenPoints(reference, caregiverPoint) : null;
+
+    return {
+      ...caregiver,
+      latitude: caregiverPoint?.latitude,
+      longitude: caregiverPoint?.longitude,
+      distanceMeters: meters,
+      distanceLabel: meters == null ? caregiver.distanceLabel : formatDistanceLabel(meters),
+      estimatedArrival: meters == null ? caregiver.estimatedArrival : estimateArrivalLabel(meters),
+      location: {
+        ...(caregiver.location || {}),
+        latitude: caregiverPoint?.latitude,
+        longitude: caregiverPoint?.longitude,
+        address: caregiver.location?.address || caregiver.address || 'Current volunteer location'
+      }
+    };
   }
 
   function demoPatientLocation() {
@@ -325,7 +402,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
   }
 
   function demoImmediateHelpMatch(location) {
-    const caregiver = demoAvailableCaregivers()[0];
+    const caregiver = demoAvailableCaregivers(location)[0];
     return {
       id: `demo-match-${Date.now()}`,
       requestedAt: new Date().toISOString(),
@@ -337,6 +414,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
       caregiverPhone: caregiver.phoneNumber,
       caregiverLatitude: caregiver.latitude,
       caregiverLongitude: caregiver.longitude,
+      caregiverLocationLabel: caregiver.location?.address || 'Current volunteer location',
       patientLatitude: location?.latitude || 1.3521,
       patientLongitude: location?.longitude || 103.9448
     };
@@ -364,23 +442,40 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
       return;
     }
 
-    loadAvailableCaregivers();
     if (!requestLocation) {
-      getCurrentPosition()
-        .then((position) => {
-          setRequestLocation({
+      fetchPatientGpsLocation(patientId)
+        .then(async (location) => {
+          if (location?.latitude && location?.longitude) {
+            const patientGpsLocation = {
+              latitude: Number(location.latitude),
+              longitude: Number(location.longitude),
+              address: location.address || location.location || t('patientLocation')
+            };
+            setRequestLocation(patientGpsLocation);
+            loadAvailableCaregivers(patientGpsLocation);
+            return;
+          }
+
+          const position = await getCurrentPosition();
+          const browserLocation = {
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
             address: 'Current location'
-          });
+          };
+          setRequestLocation(browserLocation);
+          loadAvailableCaregivers(browserLocation);
         })
         .catch(() => {
-          setRequestLocation({
+          const fallbackLocation = {
             latitude: 1.3521,
             longitude: 103.9448,
             address: 'Tampines Street 81, Block 123'
-          });
+          };
+          setRequestLocation(fallbackLocation);
+          loadAvailableCaregivers(fallbackLocation);
         });
+    } else {
+      loadAvailableCaregivers(requestLocation);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeView, user?.id, accessToken]);
@@ -422,7 +517,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
     return locationData.location;
   }
 
-  async function loadAvailableCaregivers() {
+  async function loadAvailableCaregivers(referenceLocation = requestLocation) {
     if (!accessToken) {
       return;
     }
@@ -435,11 +530,18 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
 
       if (response.ok) {
         const data = await response.json();
-        setAvailableCaregivers((data.caregivers || []).length > 0 ? data.caregivers : demoAvailableCaregivers());
+        const caregivers = data.caregivers || [];
+        setAvailableCaregivers(
+          caregivers.length > 0
+            ? caregivers.map((caregiver) => normalizeCaregiverLocation(caregiver, referenceLocation))
+            : demoAvailableCaregivers(referenceLocation)
+        );
+      } else {
+        setAvailableCaregivers(demoAvailableCaregivers(referenceLocation));
       }
     } catch (error) {
       console.log('Error loading available caregivers:', error);
-      setAvailableCaregivers(demoAvailableCaregivers());
+      setAvailableCaregivers(demoAvailableCaregivers(referenceLocation));
     }
   }
 
@@ -603,6 +705,44 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
     await loadNotifications();
     await loadCommunitySupport();
     await loadCaregiverStressScore();
+  }
+
+  async function completePatientTask(taskId) {
+    const completedAt = new Date().toISOString();
+    setTasks((currentTasks) =>
+      currentTasks.map((task) =>
+        task.id === taskId ? { ...task, completedAt, status: 'completed' } : task
+      )
+    );
+
+    if (String(taskId).startsWith('demo-')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `${supabaseFunctionsApiBase}/tasks/${taskId}/complete`,
+        {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${accessToken}` }
+        }
+      );
+
+      if (response.ok && patientId) {
+        await loadPatientData(patientId);
+      }
+    } catch (error) {
+      console.log('Error completing patient task:', error);
+    }
+  }
+
+  function completeMyTask(taskId) {
+    const completedAt = new Date().toISOString();
+    setMyTasks((currentTasks) =>
+      currentTasks.map((task) =>
+        task.id === taskId ? { ...task, completedAt, status: 'completed' } : task
+      )
+    );
   }
 
   async function handleVoiceNote() {
@@ -875,12 +1015,21 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
     let location = requestLocation;
     if (!location) {
       try {
-        const position = await getCurrentPosition();
-        location = {
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          address: 'Current location'
-        };
+        const patientGpsLocation = await fetchPatientGpsLocation(patientId);
+        if (patientGpsLocation?.latitude && patientGpsLocation?.longitude) {
+          location = {
+            latitude: Number(patientGpsLocation.latitude),
+            longitude: Number(patientGpsLocation.longitude),
+            address: patientGpsLocation.address || patientGpsLocation.location || t('patientLocation')
+          };
+        } else {
+          const position = await getCurrentPosition();
+          location = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            address: 'Current location'
+          };
+        }
         setRequestLocation(location);
       } catch (error) {
         location = {
@@ -912,20 +1061,29 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
       const data = await response.json();
       if (response.ok && data?.status === 'matched') {
         const matched = data.request;
-        const distanceKm = Number(matched.distanceKm ?? 0);
+        const patientPoint = {
+          latitude: Number(matched.patientLocation.latitude),
+          longitude: Number(matched.patientLocation.longitude)
+        };
+        const caregiverPoint = {
+          latitude: Number(matched.caregiverLocation.latitude),
+          longitude: Number(matched.caregiverLocation.longitude)
+        };
+        const distanceMeters = metersBetweenPoints(patientPoint, caregiverPoint) ?? Number(matched.distanceKm ?? 0) * 1000;
         setImmediateHelpRequest({
           id: matched.id,
           requestedAt: matched.requestedAt,
           location: matched.patientLocation.address,
           status: 'found',
           caregiverName: matched.caregiverName,
-          caregiverDistance: `${distanceKm.toFixed(1)} km away`,
-          estimatedArrival: `${Math.max(5, Math.round(distanceKm * 4))} mins`,
+          caregiverDistance: formatDistanceLabel(distanceMeters),
+          estimatedArrival: estimateArrivalLabel(distanceMeters),
           caregiverPhone: matched.caregiverPhone,
-          caregiverLatitude: matched.caregiverLocation.latitude,
-          caregiverLongitude: matched.caregiverLocation.longitude,
-          patientLatitude: matched.patientLocation.latitude,
-          patientLongitude: matched.patientLocation.longitude
+          caregiverLatitude: caregiverPoint.latitude,
+          caregiverLongitude: caregiverPoint.longitude,
+          caregiverLocationLabel: matched.caregiverLocation.address || 'Current volunteer location',
+          patientLatitude: patientPoint.latitude,
+          patientLongitude: patientPoint.longitude
         });
       } else {
         setImmediateHelpRequest(demoImmediateHelpMatch(location));
@@ -934,7 +1092,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
       console.log('Error requesting help:', error);
       setImmediateHelpRequest(demoImmediateHelpMatch(location));
     } finally {
-      await loadAvailableCaregivers();
+      await loadAvailableCaregivers(location);
       setSearchingForCaregiver(false);
     }
   }
@@ -1339,7 +1497,15 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                         {task.completedAt ? (
                           <CheckCircle className="w-6 h-6" style={{ color: '#4A9EFF' }} />
                         ) : (
-                          <div className="w-6 h-6 border-2 border-gray-300 rounded-full"></div>
+                          <button
+                            type="button"
+                            onClick={() => completeMyTask(task.id)}
+                            className="w-9 h-9 border-2 border-gray-300 rounded-full hover:border-blue-500 hover:bg-blue-50 transition-colors flex items-center justify-center text-blue-600"
+                            title={t('tooltipMarkDone')}
+                            aria-label={t('tooltipMarkDone')}
+                          >
+                            <CheckCircle className="w-5 h-5" />
+                          </button>
                         )}
                       </div>
                     </div>
@@ -1425,7 +1591,15 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                         {task.completedAt ? (
                           <CheckCircle className="w-6 h-6" style={{ color: '#4A9EFF' }} />
                         ) : (
-                          <div className="w-6 h-6 border-2 border-gray-300 rounded-full"></div>
+                          <button
+                            type="button"
+                            onClick={() => completePatientTask(task.id)}
+                            className="w-9 h-9 border-2 border-gray-300 rounded-full hover:border-blue-500 hover:bg-blue-50 transition-colors flex items-center justify-center text-blue-600"
+                            title={t('tooltipMarkDone')}
+                            aria-label={t('tooltipMarkDone')}
+                          >
+                            <CheckCircle className="w-5 h-5" />
+                          </button>
                         )}
                       </div>
                     </div>
@@ -1614,9 +1788,9 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                         maxZoom={19}
                       />
-                      <Marker position={[requestLocation.latitude, requestLocation.longitude]} icon={homeMapIcon}>
+                      <Marker position={[requestLocation.latitude, requestLocation.longitude]} icon={patientMapIcon}>
                         <Popup>
-                          <strong>{t('youAreHome')}</strong><br />
+                          <strong>{t('patientLocation')}</strong><br />
                           {requestLocation.address}
                         </Popup>
                       </Marker>
@@ -1699,6 +1873,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                           >
                             <Popup>
                               <strong>{immediateHelpRequest.caregiverName}</strong><br />
+                              {immediateHelpRequest.caregiverLocationLabel || 'Current volunteer location'}<br />
                               {immediateHelpRequest.caregiverDistance}
                             </Popup>
                           </Marker>
@@ -1798,6 +1973,12 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                           <MapPin className="w-5 h-5 text-gray-400" />
                           <span className="text-sm">{dt('Pickup')}: {dt(immediateHelpRequest.location)}</span>
                         </div>
+                        {immediateHelpRequest.caregiverLocationLabel && (
+                          <div className="flex items-center gap-3 text-gray-700">
+                            <Users className="w-5 h-5 text-gray-400" />
+                            <span className="text-sm">{t('communityCaregiver')}: {dt(immediateHelpRequest.caregiverLocationLabel)}</span>
+                          </div>
+                        )}
                         <div className="flex items-center gap-3 text-gray-700">
                           <Clock className="w-5 h-5 text-gray-400" />
                           <span className="text-sm">{dt('Requested')}: {new Date(immediateHelpRequest.requestedAt).toLocaleTimeString()}</span>
