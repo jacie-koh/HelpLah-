@@ -67,6 +67,35 @@ export function PatientView({ user, profile, accessToken }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tasks, accessibilitySettings.notifications, accessibilitySettings.taskReminderCount, language]);
 
+  function demoPatientTasks() {
+    return [
+      { id: 'patient-demo-meds', title: 'Take Morning Medication', time: '08:00', completedAt: null, videoUrl: 'https://www.youtube.com/watch?v=medication-demo' },
+      { id: 'patient-demo-breakfast', title: 'Eat Breakfast', time: '08:30', completedAt: null, videoUrl: null },
+      { id: 'patient-demo-bp', title: 'Check Blood Pressure', time: '10:00', completedAt: null, videoUrl: 'https://www.youtube.com/watch?v=bp-check' },
+      { id: 'patient-demo-water', title: 'Drink Water', time: '11:30', completedAt: null, videoUrl: null },
+      { id: 'patient-demo-walk', title: 'Short Walk Near Home', time: '16:00', completedAt: null, videoUrl: null },
+      { id: 'patient-demo-evening', title: 'Take Evening Medication', time: '19:00', completedAt: null, videoUrl: 'https://www.youtube.com/watch?v=medication-demo' }
+    ];
+  }
+
+  function demoLocationState() {
+    return {
+      current: {
+        latitude: 1.3519,
+        longitude: 103.9447,
+        address: 'Tampines Street 81, Block 827A'
+      },
+      geofence: {
+        patientId: user?.id || 'demo-patient',
+        homeAddress: accessibilitySettings.homeAddress || 'Tampines Street 82, Block 821',
+        homeDistanceAvailable: true,
+        distanceFromHomeMeters: 260,
+        isHome: false,
+        updatedAt: new Date().toISOString()
+      }
+    };
+  }
+
   async function loadTasks() {
     try {
       const response = await fetch(
@@ -80,10 +109,11 @@ export function PatientView({ user, profile, accessToken }) {
 
       if (response.ok) {
         const data = await response.json();
-        setTasks(data.tasks || []);
+        setTasks((data.tasks || []).length > 0 ? data.tasks : demoPatientTasks());
       }
     } catch (error) {
       console.log('Error loading tasks:', error);
+      setTasks(demoPatientTasks());
     }
   }
 
@@ -178,11 +208,21 @@ export function PatientView({ user, profile, accessToken }) {
             console.log('Error updating location:', error);
           }
         },
-        (error) => {
-          console.log('Location error:', error);
-        },
-        { enableHighAccuracy: true }
+      (error) => {
+        console.log('Location error:', error);
+        const demo = demoLocationState();
+        setLocation(demo.current);
+        setGeofence(demo.geofence);
+        setIsHome(demo.geofence.isHome);
+      },
+      { enableHighAccuracy: true }
       );
+    }
+    else {
+      const demo = demoLocationState();
+      setLocation(demo.current);
+      setGeofence(demo.geofence);
+      setIsHome(demo.geofence.isHome);
     }
   }
 

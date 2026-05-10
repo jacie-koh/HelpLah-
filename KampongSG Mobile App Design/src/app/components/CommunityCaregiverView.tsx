@@ -534,6 +534,13 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
         status: 'accepted'
       };
       setAvailableAssignments(prev => [...prev, newAssignment]);
+      setPatients((prevPatients) =>
+        prevPatients.map((item) =>
+          item.id === patientId
+            ? { ...item, hasAssignedCaretaker: true, needsCareSoon: false }
+            : item
+        )
+      );
       alert(t('alertOfferHelpPrimaryNotified', { name: patient.name }));
     }
   }

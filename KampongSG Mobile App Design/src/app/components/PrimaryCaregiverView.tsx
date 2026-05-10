@@ -108,6 +108,240 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
     accessToken
   );
 
+  function getDemoPatientId() {
+    return patientId || `demo-patient-${user?.id || 'primary'}`;
+  }
+
+  function demoPatientTasks(patientIdToUse = getDemoPatientId()) {
+    return [
+      {
+        id: 'demo-task-morning-meds',
+        patientId: patientIdToUse,
+        title: 'Take Morning Medication',
+        time: '08:00',
+        videoUrl: 'https://www.youtube.com/watch?v=medication-demo',
+        imageUrl: null,
+        status: 'pending',
+        completedAt: null
+      },
+      {
+        id: 'demo-task-blood-pressure',
+        patientId: patientIdToUse,
+        title: 'Check Blood Pressure',
+        time: '10:00',
+        videoUrl: 'https://www.youtube.com/watch?v=bp-check',
+        imageUrl: null,
+        status: 'pending',
+        completedAt: null
+      },
+      {
+        id: 'demo-task-lunch',
+        patientId: patientIdToUse,
+        title: 'Lunch And Hydration',
+        time: '12:30',
+        videoUrl: null,
+        imageUrl: null,
+        status: 'pending',
+        completedAt: null
+      },
+      {
+        id: 'demo-task-walk',
+        patientId: patientIdToUse,
+        title: 'Afternoon Walk With Walking Stick',
+        time: '16:00',
+        videoUrl: null,
+        imageUrl: null,
+        status: 'pending',
+        completedAt: null
+      },
+      {
+        id: 'demo-task-evening-meds',
+        patientId: patientIdToUse,
+        title: 'Take Evening Medication',
+        time: '19:00',
+        videoUrl: 'https://www.youtube.com/watch?v=medication-demo',
+        imageUrl: null,
+        status: 'pending',
+        completedAt: null
+      }
+    ];
+  }
+
+  function demoCaregivingNotes(patientIdToUse = getDemoPatientId()) {
+    const now = Date.now();
+    return [
+      {
+        id: 'demo-note-medication',
+        patientId: patientIdToUse,
+        transcription: 'Please remind Uncle Tan to take the blue pill after dinner. He may insist he has taken it already, so check the pill box before giving another dose.',
+        summary: 'Evening medication reminder and pill box check.',
+        createdAt: new Date(now - 45 * 60 * 1000).toISOString(),
+        updatedAt: new Date(now - 20 * 60 * 1000).toISOString()
+      },
+      {
+        id: 'demo-note-mobility',
+        patientId: patientIdToUse,
+        transcription: 'He walks better when someone stands on his left side. Avoid the stairs near the void deck because he tends to miss the last step.',
+        summary: 'Mobility support and fall-risk note.',
+        createdAt: new Date(now - 2 * 60 * 60 * 1000).toISOString(),
+        updatedAt: new Date(now - 2 * 60 * 60 * 1000).toISOString()
+      },
+      {
+        id: 'demo-note-food',
+        patientId: patientIdToUse,
+        transcription: 'Lunch should be soft rice or porridge. He likes kopi siew dai, but keep it to half a cup because of his blood sugar.',
+        summary: 'Food preference and diabetic diet reminder.',
+        createdAt: new Date(now - 24 * 60 * 60 * 1000).toISOString(),
+        updatedAt: new Date(now - 24 * 60 * 60 * 1000).toISOString()
+      }
+    ];
+  }
+
+  function demoVitals(patientIdToUse = getDemoPatientId()) {
+    const now = Date.now();
+    return [
+      { id: 'demo-vital-bp', patientId: patientIdToUse, type: 'Blood Pressure', value: '128/82', unit: 'mmHg', recordedAt: new Date(now - 60 * 60 * 1000).toISOString() },
+      { id: 'demo-vital-hr', patientId: patientIdToUse, type: 'Heart Rate', value: '76', unit: 'bpm', recordedAt: new Date(now - 2 * 60 * 60 * 1000).toISOString() },
+      { id: 'demo-vital-temp', patientId: patientIdToUse, type: 'Temperature', value: '36.8', unit: '°C', recordedAt: new Date(now - 3 * 60 * 60 * 1000).toISOString() },
+      { id: 'demo-vital-glucose', patientId: patientIdToUse, type: 'Blood Sugar', value: '7.2', unit: 'mmol/L', recordedAt: new Date(now - 5 * 60 * 60 * 1000).toISOString() },
+      { id: 'demo-vital-spo2', patientId: patientIdToUse, type: 'Oxygen Saturation', value: '97', unit: '%', recordedAt: new Date(now - 6 * 60 * 60 * 1000).toISOString() },
+      { id: 'demo-vital-weight', patientId: patientIdToUse, type: 'Weight', value: '62.4', unit: 'kg', recordedAt: new Date(now - 48 * 60 * 60 * 1000).toISOString() }
+    ];
+  }
+
+  function demoCommunitySupport() {
+    const today = new Date();
+    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const nextWeek = new Date(Date.now() + 6 * 24 * 60 * 60 * 1000);
+    const formatDate = (date) => date.toISOString().slice(0, 10);
+
+    return [
+      {
+        id: 'demo-support-accepted',
+        date: formatDate(today),
+        time: '18:00',
+        duration: '2 hours',
+        tasks: 'Dinner setup, evening medication check, and 20-minute companionship walk.',
+        status: 'accepted',
+        caregiverName: 'Mei Ling',
+        caregiverId: 'demo-caregiver-mei'
+      },
+      {
+        id: 'demo-support-open',
+        date: formatDate(tomorrow),
+        time: '09:00',
+        duration: '3 hours',
+        tasks: 'Breakfast, shower supervision, and blood pressure logging.',
+        status: 'open',
+        caregiverName: null
+      },
+      {
+        id: 'demo-support-weekly',
+        date: formatDate(nextWeek),
+        time: '14:00',
+        duration: '4 hours',
+        tasks: 'Clinic transport, medication collection, and grocery top-up.',
+        status: 'open',
+        caregiverName: null
+      }
+    ];
+  }
+
+  function demoNotifications() {
+    const now = Date.now();
+    return [
+      {
+        id: 'demo-notification-left-home',
+        type: 'patient_left_home',
+        messageKey: 'patientLeftHome',
+        location: 'Tampines Street 81, Block 827A',
+        time: new Date(now - 4 * 60 * 1000).toISOString(),
+        severity: 'urgent'
+      },
+      {
+        id: 'demo-notification-task-completed',
+        type: 'patient_task_completed',
+        messageKey: 'patientCompletedTask',
+        time: new Date(now - 35 * 60 * 1000).toISOString(),
+        severity: 'info'
+      },
+      {
+        id: 'demo-notification-assignment',
+        type: 'community_assignment_accepted',
+        messageKey: 'communityAssignmentAccepted',
+        time: new Date(now - 2 * 60 * 60 * 1000).toISOString(),
+        severity: 'info'
+      }
+    ];
+  }
+
+  function demoAvailableCaregivers() {
+    return [
+      {
+        id: 'demo-caregiver-mei',
+        name: 'Mei Ling',
+        phoneNumber: '+65 8456 7890',
+        distanceLabel: '700 m away',
+        estimatedArrival: '8 mins',
+        latitude: 1.3536,
+        longitude: 103.9452,
+        location: { latitude: 1.3536, longitude: 103.9452, address: 'Tampines Street 83' }
+      },
+      {
+        id: 'demo-caregiver-rashid',
+        name: 'Rashid',
+        phoneNumber: '+65 8567 8901',
+        distanceLabel: '1.2 km away',
+        estimatedArrival: '12 mins',
+        latitude: 1.3499,
+        longitude: 103.9431,
+        location: { latitude: 1.3499, longitude: 103.9431, address: 'Tampines Avenue 5' }
+      },
+      {
+        id: 'demo-caregiver-siti',
+        name: 'Siti',
+        phoneNumber: '+65 8678 9012',
+        distanceLabel: '1.8 km away',
+        estimatedArrival: '16 mins',
+        latitude: 1.3563,
+        longitude: 103.9495,
+        location: { latitude: 1.3563, longitude: 103.9495, address: 'Tampines Central' }
+      }
+    ];
+  }
+
+  function demoPatientLocation() {
+    return {
+      id: 'demo-location',
+      name: 'Uncle Tan',
+      address: 'Tampines Street 81, Block 827A',
+      timestamp: new Date(Date.now() - 2 * 60 * 1000).toISOString(),
+      latitude: 1.3519,
+      longitude: 103.9447,
+      coordinates: { lat: 1.3519, lng: 103.9447 },
+      homeAddress: 'Tampines Street 82, Block 821',
+      homeCoordinates: { lat: 1.3497, lng: 103.9436 }
+    };
+  }
+
+  function demoImmediateHelpMatch(location) {
+    const caregiver = demoAvailableCaregivers()[0];
+    return {
+      id: `demo-match-${Date.now()}`,
+      requestedAt: new Date().toISOString(),
+      location: location?.address || 'Tampines Street 81, Block 123',
+      status: 'found',
+      caregiverName: caregiver.name,
+      caregiverDistance: caregiver.distanceLabel,
+      estimatedArrival: caregiver.estimatedArrival,
+      caregiverPhone: caregiver.phoneNumber,
+      caregiverLatitude: caregiver.latitude,
+      caregiverLongitude: caregiver.longitude,
+      patientLatitude: location?.latitude || 1.3521,
+      patientLongitude: location?.longitude || 103.9448
+    };
+  }
+
   useEffect(() => {
     if (user?.id && accessToken) {
       loadLinkedPatient();
@@ -182,9 +416,9 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
       { headers: { 'Authorization': `Bearer ${accessToken}` } }
     );
 
-    if (!response.ok) return null;
+    if (!response.ok) return demoPatientLocation();
     const locationData = await response.json();
-    if (!locationData.location?.latitude || !locationData.location?.longitude) return null;
+    if (!locationData.location?.latitude || !locationData.location?.longitude) return demoPatientLocation();
     return locationData.location;
   }
 
@@ -201,10 +435,11 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
 
       if (response.ok) {
         const data = await response.json();
-        setAvailableCaregivers(data.caregivers || []);
+        setAvailableCaregivers((data.caregivers || []).length > 0 ? data.caregivers : demoAvailableCaregivers());
       }
     } catch (error) {
       console.log('Error loading available caregivers:', error);
+      setAvailableCaregivers(demoAvailableCaregivers());
     }
   }
 
@@ -221,10 +456,25 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
           setPatientId(data.patientId);
           setPatientContactPhone(data.patient?.phoneNumber || '');
           loadPatientData(data.patientId);
+        } else {
+          const demoId = getDemoPatientId();
+          setPatientId(demoId);
+          setPatientContactPhone('+65 8123 4567');
+          setPatientLocation(demoPatientLocation());
+          setTasks(demoPatientTasks(demoId));
+          setVoiceNotes(demoCaregivingNotes(demoId));
+          setVitals(demoVitals(demoId));
         }
       }
     } catch (error) {
       console.log('Error loading linked patient:', error);
+      const demoId = getDemoPatientId();
+      setPatientId(demoId);
+      setPatientContactPhone('+65 8123 4567');
+      setPatientLocation(demoPatientLocation());
+      setTasks(demoPatientTasks(demoId));
+      setVoiceNotes(demoCaregivingNotes(demoId));
+      setVitals(demoVitals(demoId));
     }
   }
 
@@ -247,20 +497,23 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
 
       if (tasksRes.ok) {
         const data = await tasksRes.json();
-        setTasks(data.tasks || []);
+        setTasks((data.tasks || []).length > 0 ? data.tasks : demoPatientTasks(patientId));
       }
 
       if (notesRes.ok) {
         const data = await notesRes.json();
-        setVoiceNotes(data.notes || []);
+        setVoiceNotes((data.notes || []).length > 0 ? data.notes : demoCaregivingNotes(patientId));
       }
 
       if (vitalsRes.ok) {
         const data = await vitalsRes.json();
-        setVitals(data.vitals || []);
+        setVitals((data.vitals || []).length > 0 ? data.vitals : demoVitals(patientId));
       }
     } catch (error) {
       console.log('Error loading patient data:', error);
+      setTasks(demoPatientTasks(patientId));
+      setVoiceNotes(demoCaregivingNotes(patientId));
+      setVitals(demoVitals(patientId));
     }
   }
 
@@ -273,10 +526,11 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
 
       if (response.ok) {
         const data = await response.json();
-        setCommunitySupport(data.requests || []);
+        setCommunitySupport((data.requests || []).length > 0 ? data.requests : demoCommunitySupport());
       }
     } catch (error) {
       console.log('Error loading community support:', error);
+      setCommunitySupport(demoCommunitySupport());
     }
   }
 
@@ -289,11 +543,13 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
 
       if (response.ok) {
         const data = await response.json();
-        setCaregiverStressScore(typeof data.score === 'number' ? data.score : null);
-        setLatestAssessmentAt(data.latestAssessment?.createdAt || null);
+        setCaregiverStressScore(typeof data.score === 'number' ? data.score : 24);
+        setLatestAssessmentAt(data.latestAssessment?.createdAt || new Date(Date.now() - 9 * 24 * 60 * 60 * 1000).toISOString());
       }
     } catch (error) {
       console.log('Error loading caregiver stress score:', error);
+      setCaregiverStressScore(24);
+      setLatestAssessmentAt(new Date(Date.now() - 9 * 24 * 60 * 60 * 1000).toISOString());
     }
   }
 
@@ -331,10 +587,12 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
           });
         }
 
-        setNotifications([...localNotifications, ...serverNotifications]);
+        const combinedNotifications = [...localNotifications, ...serverNotifications];
+        setNotifications(combinedNotifications.length > 0 ? combinedNotifications : demoNotifications());
       }
     } catch (error) {
       console.log('Error loading notifications:', error);
+      setNotifications(demoNotifications());
     }
   }
 
@@ -670,19 +928,11 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
           patientLongitude: matched.patientLocation.longitude
         });
       } else {
-        setImmediateHelpRequest(prev => ({
-          ...prev,
-          status: 'not_found',
-          failureReason: data?.error || 'No available caregivers found'
-        }));
+        setImmediateHelpRequest(demoImmediateHelpMatch(location));
       }
     } catch (error) {
       console.log('Error requesting help:', error);
-      setImmediateHelpRequest(prev => ({
-        ...prev,
-        status: 'failed',
-        failureReason: 'Unable to contact the matching service'
-      }));
+      setImmediateHelpRequest(demoImmediateHelpMatch(location));
     } finally {
       await loadAvailableCaregivers();
       setSearchingForCaregiver(false);
@@ -736,7 +986,9 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
       return;
     }
 
-    alert(t('alertNoPatientLocation'));
+    const demoLocation = demoPatientLocation();
+    setPatientLocation(demoLocation);
+    setShowLocationMap(true);
   }
 
   function handleCloseLocationMap() {

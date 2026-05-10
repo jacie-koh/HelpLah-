@@ -42,6 +42,65 @@ export function SettingsScreen({ user, profile, accessToken, onSignOut }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  function demoSettingsFallback() {
+    if (profile.role === 'patient') {
+      return {
+        homeAddress: 'Tampines Street 82, Block 821',
+        contactPhone: profile?.phoneNumber || '+65 8123 4567',
+        emergencyContact: 'Sarah Tan',
+        emergencyPhone: '+65 9123 4567',
+        taskReminderCount: 3
+      };
+    }
+
+    if (profile.role === 'primary_caregiver') {
+      return {
+        homeAddress: 'Tampines Street 82, Block 821',
+        contactPhone: profile?.phoneNumber || '+65 9123 4567',
+        emergencyContact: 'Mei Ling',
+        emergencyPhone: '+65 8456 7890',
+        taskReminderCount: 2
+      };
+    }
+
+    return {
+      homeAddress: 'Bedok Reservoir Road',
+      contactPhone: profile?.phoneNumber || '+65 8456 7890',
+      emergencyContact: 'KampongSG Support',
+      emergencyPhone: '1800-KAMPONG',
+      taskReminderCount: 2
+    };
+  }
+
+  function applyLoadedSettings(settings: any = {}) {
+    const demoDefaults = demoSettingsFallback();
+    const loadedSettings = {
+      language: settings.language || localLanguage || 'en-sg',
+      notifications: settings.notifications !== false,
+      homeAddress: settings.homeAddress || demoDefaults.homeAddress,
+      speechToText: settings.speechToText !== false,
+      textToSpeech: settings.textToSpeech !== false,
+      fontSize: settings.fontSize || 'Medium',
+      contactPhone: settings.contactPhone || demoDefaults.contactPhone,
+      taskReminderCount: Number(settings.taskReminderCount ?? demoDefaults.taskReminderCount),
+      emergencyContact: settings.emergencyContact || demoDefaults.emergencyContact,
+      emergencyPhone: settings.emergencyPhone || demoDefaults.emergencyPhone
+    };
+
+    setLocalLanguage(loadedSettings.language);
+    setLanguage(loadedSettings.language);
+    setNotifications(loadedSettings.notifications);
+    setHomeAddress(loadedSettings.homeAddress);
+    setSpeechToText(loadedSettings.speechToText);
+    setTextToSpeech(loadedSettings.textToSpeech);
+    setFontSize(loadedSettings.fontSize);
+    setContactPhone(loadedSettings.contactPhone);
+    setTaskReminderCount(loadedSettings.taskReminderCount);
+    setEmergencyContact(loadedSettings.emergencyContact);
+    setEmergencyPhone(loadedSettings.emergencyPhone);
+    setAccessibilitySettings(loadedSettings);
+  }
+
   async function loadSettings() {
     try {
       const response = await fetch(
@@ -55,35 +114,11 @@ export function SettingsScreen({ user, profile, accessToken, onSignOut }) {
 
       if (response.ok) {
         const data = await response.json();
-        if (data.settings) {
-          const loadedSettings = {
-            language: data.settings.language || 'en-sg',
-            notifications: data.settings.notifications !== false,
-            homeAddress: data.settings.homeAddress || '',
-            speechToText: data.settings.speechToText !== false,
-            textToSpeech: data.settings.textToSpeech !== false,
-            fontSize: data.settings.fontSize || 'Medium',
-            contactPhone: data.settings.contactPhone || profile?.phoneNumber || '',
-            taskReminderCount: Number(data.settings.taskReminderCount ?? 2),
-            emergencyContact: data.settings.emergencyContact || '',
-            emergencyPhone: data.settings.emergencyPhone || ''
-          };
-          setLocalLanguage(loadedSettings.language);
-          setLanguage(loadedSettings.language);
-          setNotifications(loadedSettings.notifications);
-          setHomeAddress(loadedSettings.homeAddress);
-          setSpeechToText(loadedSettings.speechToText);
-          setTextToSpeech(loadedSettings.textToSpeech);
-          setFontSize(loadedSettings.fontSize);
-          setContactPhone(loadedSettings.contactPhone);
-          setTaskReminderCount(loadedSettings.taskReminderCount);
-          setEmergencyContact(loadedSettings.emergencyContact);
-          setEmergencyPhone(loadedSettings.emergencyPhone);
-          setAccessibilitySettings(loadedSettings);
-        }
+        applyLoadedSettings(data.settings || {});
       }
     } catch (error) {
       console.log('Error loading settings:', error);
+      applyLoadedSettings();
     }
   }
 
