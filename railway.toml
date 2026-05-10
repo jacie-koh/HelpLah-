@@ -1,6 +1,6 @@
 [build]
 builder = "RAILPACK"
-buildCommand = "cd \"KampongSG Mobile App Design\" && npm ci && npm run build"
+buildCommand = "cd \"KampongSG Mobile App Design\" && npm ci && npm run build && npm prune --omit=dev"
 
 [deploy]
 startCommand = "cd \"KampongSG Mobile App Design\" && npm run start"

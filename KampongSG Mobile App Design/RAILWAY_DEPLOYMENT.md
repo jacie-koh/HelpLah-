@@ -1,29 +1,25 @@
 # Railway deployment
 
-This folder is ready to deploy the HelpLah frontend on Railway.
+This repo is ready to deploy the HelpLah frontend on Railway.
 
 ## Railway dashboard
 
 1. Create a new Railway project.
 2. Choose **Deploy from GitHub repo**.
-3. Set the Railway root directory to:
+3. Leave the Railway root directory as the repository root.
 
-   ```text
-   KampongSG Mobile App Design
-   ```
-
-4. Railway will use `railway.toml` and `nixpacks.toml`.
+4. Railway will use the root `railway.toml`.
 
 Build command:
 
 ```bash
-npm ci && npm run build
+cd "KampongSG Mobile App Design" && npm ci && npm run build && npm prune --omit=dev
 ```
 
 Start command:
 
 ```bash
-npm run start
+cd "KampongSG Mobile App Design" && npm run start
 ```
 
 The app still uses the existing Supabase Edge Function backend:

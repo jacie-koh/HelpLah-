@@ -100,9 +100,9 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
       'SEA Lion Chatbot',
       '1800-KAMPONG',
       'support@kampongsg.com',
-      'Volunteer assigned',
-      'Awaiting volunteer',
-      'Your request'
+      'Volunteer Assigned',
+      'Awaiting Volunteer',
+      'Your Request'
     ],
     language,
     accessToken
@@ -1224,7 +1224,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                                 <Users className="w-5 h-5 text-blue-700" />
                                 <span className="text-base font-semibold text-gray-800">{session.caregiverName}</span>
                                 <span className="text-xs px-2 py-1 rounded-full font-semibold bg-green-100 text-green-700">
-                                  {dt('Volunteer assigned')}
+                                  {dt('Volunteer Assigned')}
                                 </span>
                               </>
                             ) : (
@@ -1232,12 +1232,12 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                                 <Users className="w-5 h-5 text-gray-400" />
                                 <span className="text-base font-semibold text-gray-600">{t('waitingCaregiver')}</span>
                                 <span className="text-xs px-2 py-1 rounded-full font-semibold bg-orange-100 text-orange-700">
-                                  {dt('Awaiting volunteer')}
+                                  {dt('Awaiting Volunteer')}
                                 </span>
                               </>
                             )}
                           </div>
-                          <p className="text-xs text-purple-700 ml-8 mb-2">{dt('Your request')}</p>
+                          <p className="text-xs text-purple-700 ml-8 mb-2">{dt('Your Request')}</p>
                           <div className="flex items-center gap-4 text-sm text-gray-600 ml-8 mb-1">
                             <span className="flex items-center gap-1">
                               <Clock className="w-4 h-4" />
@@ -1252,7 +1252,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                         <button
                           onClick={() => handleTextToSpeech([
                             t('scheduledSupport'),
-                            hasAssignedVolunteer(session) ? `${dt('Volunteer assigned')}: ${session.caregiverName}` : dt('Awaiting volunteer'),
+                            hasAssignedVolunteer(session) ? `${dt('Volunteer Assigned')}: ${session.caregiverName}` : dt('Awaiting Volunteer'),
                             `${session.date} ${t('at')} ${session.time}`,
                             `${t('duration')}: ${dt(session.duration)}`,
                             session.tasks ? dt(session.tasks) : ''
@@ -1516,13 +1516,13 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                       <div className="mb-4">
                         <Users className="w-12 h-12 text-gray-400 mx-auto" />
                       </div>
-                      <h3 className="text-xl font-bold text-gray-800 mb-2">No caregiver match found</h3>
+                      <h3 className="text-xl font-bold text-gray-800 mb-2">No Caregiver Match Found</h3>
                       <p className="text-gray-600 mb-6">{immediateHelpRequest.failureReason || 'Please try again later or refresh the app.'}</p>
                       <button
                         onClick={handleCancelRequest}
                         className="w-full bg-blue-700 text-white py-4 rounded-2xl font-semibold hover:bg-blue-800 transition-colors"
                       >
-                        Try again
+                        Try Again
                       </button>
                     </div>
                   ) : (
@@ -2012,7 +2012,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
           onTasksCreated={() => {
             setShowMyTaskManager(false);
             // Load my tasks
-            setMyTasks([...myTasks, { id: Date.now(), title: 'Sample task', time: '10:00', completedAt: null }]);
+            setMyTasks([...myTasks, { id: Date.now(), title: 'Sample Task', time: '10:00', completedAt: null }]);
           }}
         />
       )}

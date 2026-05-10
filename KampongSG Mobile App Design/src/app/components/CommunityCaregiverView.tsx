@@ -642,7 +642,7 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
     const incentiveAlerts = [{
       type: 'incentive',
       id: 'daily_incentive',
-      title: 'Daily community boost',
+      title: t('dailyCommunityBoost'),
       message: incentiveMessages[dayIndex]
     }];
 
