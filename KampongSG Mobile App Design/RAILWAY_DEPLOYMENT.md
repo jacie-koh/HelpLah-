@@ -22,6 +22,13 @@ Start command:
 cd "KampongSG Mobile App Design" && npm run start
 ```
 
+For local development, run this inside `KampongSG Mobile App Design`:
+
+```bash
+npm install
+npm run dev
+```
+
 The app still uses the existing Supabase Edge Function backend:
 
 ```text

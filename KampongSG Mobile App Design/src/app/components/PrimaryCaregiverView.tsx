@@ -434,7 +434,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
       }
     );
 
-    if (!response.ok) throw new Error('Failed to create community note.');
+    if (!response.ok) throw new Error('Failed to create caregiving note.');
     await loadPatientData(patientId);
     return true;
   }
@@ -504,7 +504,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
       }
     );
 
-    if (!response.ok) throw new Error('Failed to update community note.');
+    if (!response.ok) throw new Error('Failed to update caregiving note.');
     const data = await response.json();
     setVoiceNotes((current) => current.map((note) => note.id === noteId ? data.note : note));
     return data.note;

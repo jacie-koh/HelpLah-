@@ -628,7 +628,7 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
       type: 'assignment_drop',
       id: 'assignment_drop',
       count: openAssignmentCount,
-      message: `${openAssignmentCount} new assignments available for the next week.`
+      message: t('assignmentDropMessage', { count: openAssignmentCount })
     }] : [];
 
     const incentiveMessages = [
@@ -1107,7 +1107,7 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
                           onClick={() => handleOfferHelp(patient.id)}
                           className="mt-3 w-full bg-orange-600 text-white py-2 rounded-lg text-xs font-semibold hover:bg-orange-700 transition"
                         >
-                          {t('requestHelpNow')}
+                          {t('immediateAssignmentsToHelpNow')}
                         </button>
                       </div>
                     ))}
@@ -1278,7 +1278,7 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
                             onClick={() => handleOfferHelp(patient.id)}
                             className="mt-3 w-full bg-orange-600 text-white py-2 rounded-lg text-xs font-semibold hover:bg-orange-700 transition"
                           >
-                            {t('requestHelpNow')}
+                            {t('immediateAssignmentsToHelpNow')}
                           </button>
                         </div>
                       );
@@ -1291,7 +1291,7 @@ export function CommunityCaregiverView({ user, profile, accessToken }) {
                             <Calendar className="w-5 h-5 text-blue-600" />
                             <div>
                           <p className="font-semibold text-blue-900">{t('assignmentDrop')}</p>
-                              <p className="text-blue-700 text-xs mt-1">{dt(alertItem.message)}</p>
+                              <p className="text-blue-700 text-xs mt-1">{alertItem.message}</p>
                             </div>
                           </div>
                           <button

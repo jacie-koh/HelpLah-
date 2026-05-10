@@ -10,6 +10,7 @@ import { CommunityCaregiverView } from './components/CommunityCaregiverView';
 import { SettingsScreen } from './components/SettingsScreen';
 import { AssessmentScreen } from './components/AssessmentScreen';
 import { getTranslation } from './utils/translations';
+import { notifyUser, type AppNotificationPayload } from './utils/notifications';
 
 const defaultAccessibilitySettings = {
   notifications: true,
@@ -35,6 +36,7 @@ export default function App() {
   const [accessToken, setAccessToken] = useState(null);
   const [language, setLanguage] = useState('en-sg');
   const [accessibilitySettings, setAccessibilitySettings] = useState(defaultAccessibilitySettings);
+  const [topNotification, setTopNotification] = useState<(AppNotificationPayload & { id: number }) | null>(null);
 
   useEffect(() => {
     const fontSize = accessibilitySettings.fontSize || 'Medium';
@@ -45,6 +47,114 @@ export default function App() {
   useEffect(() => {
     checkUser();
   }, []);
+
+  useEffect(() => {
+    function handleAppNotification(event: Event) {
+      const detail = (event as CustomEvent<AppNotificationPayload>).detail;
+      if (!detail?.title) return;
+      setTopNotification({ ...detail, id: Date.now() });
+    }
+
+    window.addEventListener('helplah:notification', handleAppNotification);
+    return () => window.removeEventListener('helplah:notification', handleAppNotification);
+  }, []);
+
+  useEffect(() => {
+    if (!topNotification) return undefined;
+    const timeout = window.setTimeout(() => setTopNotification(null), 6500);
+    return () => window.clearTimeout(timeout);
+  }, [topNotification?.id]);
+
+  useEffect(() => {
+    if (profile?.role !== 'primary_caregiver' || !user?.id || !accessToken || !accessibilitySettings.notifications) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    const timers: number[] = [];
+
+    const reminderKeys = [
+      'wellbeingReminderKopi',
+      'wellbeingReminderFood',
+      'wellbeingReminderToilet',
+      'wellbeingReminderWater',
+      'wellbeingReminderBreak',
+      'wellbeingReminderMedication',
+      'wellbeingReminderSleep',
+      'wellbeingReminderFriends',
+      'wellbeingReminderFreshAir',
+      'wellbeingReminderBreathing',
+      'wellbeingReminderQuietTime'
+    ];
+
+    function frequencyForScore(score: number | null) {
+      if (score === null || score <= 10) return 2;
+      if (score <= 20) return 3;
+      return 4;
+    }
+
+    function reminderTimesForCount(count: number) {
+      return {
+        2: ['10:00', '18:00'],
+        3: ['09:30', '14:00', '19:30'],
+        4: ['09:00', '12:30', '16:30', '20:30']
+      }[count] || ['10:00', '18:00'];
+    }
+
+    function msUntilNext(time: string) {
+      const [hour, minute] = time.split(':').map(Number);
+      const next = new Date();
+      next.setHours(hour, minute, 0, 0);
+      if (next.getTime() <= Date.now()) {
+        next.setDate(next.getDate() + 1);
+      }
+      return next.getTime() - Date.now();
+    }
+
+    function reminderKeyForSlot(slotIndex: number) {
+      const dayIndex = Math.floor(Date.now() / (24 * 60 * 60 * 1000));
+      return reminderKeys[(dayIndex + slotIndex) % reminderKeys.length];
+    }
+
+    async function scheduleReminders() {
+      let score: number | null = null;
+      try {
+        const response = await fetch(
+          `${supabaseFunctionsApiBase}/caregiver/${user.id}/latest-score`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        if (response.ok) {
+          const data = await response.json();
+          score = typeof data.score === 'number' ? data.score : null;
+        }
+      } catch (error) {
+        console.log('Error loading wellbeing reminder score:', error);
+      }
+
+      if (cancelled) return;
+
+      reminderTimesForCount(frequencyForScore(score)).forEach((time, slotIndex) => {
+        const schedule = () => {
+          const timer = window.setTimeout(() => {
+            if (cancelled) return;
+            notifyUser(
+              getTranslation(language, 'wellbeingReminderTitle'),
+              getTranslation(language, reminderKeyForSlot(slotIndex))
+            );
+            schedule();
+          }, msUntilNext(time));
+          timers.push(timer);
+        };
+        schedule();
+      });
+    }
+
+    scheduleReminders();
+    return () => {
+      cancelled = true;
+      timers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, [profile?.role, user?.id, accessToken, accessibilitySettings.notifications, language]);
 
   async function checkUser() {
     try {
@@ -168,6 +278,25 @@ export default function App() {
 
   return (
     <LanguageContext.Provider value={languageContextValue}>
+      {topNotification && (
+        <div className="fixed left-3 right-3 top-3 z-[5000] mx-auto max-w-2xl rounded-xl border border-blue-200 bg-white px-4 py-3 shadow-lg">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-bold text-blue-900">{topNotification.title}</p>
+              {topNotification.body && (
+                <p className="mt-1 text-sm text-gray-700">{topNotification.body}</p>
+              )}
+            </div>
+            <button
+              onClick={() => setTopNotification(null)}
+              className="rounded-lg px-2 text-lg leading-none text-gray-500 hover:bg-gray-100"
+              aria-label="Dismiss notification"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
       <BrowserRouter>
         <Routes>
           {profile.role === 'patient' && (
