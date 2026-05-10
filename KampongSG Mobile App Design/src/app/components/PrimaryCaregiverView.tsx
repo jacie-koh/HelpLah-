@@ -779,6 +779,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
         colorClass: 'text-gray-700',
         bgClass: 'bg-gray-100',
         borderClass: 'border-gray-200',
+        tipKey: 'assessmentNotCompletedMsg',
         markerPercent: 0
       };
     }
@@ -792,6 +793,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
         colorClass: 'text-green-700',
         bgClass: 'bg-green-50',
         borderClass: 'border-green-200',
+        tipKey: 'burdenLowTip',
         markerPercent: Math.min(100, Math.max(0, (score / 48) * 100))
       };
     }
@@ -805,6 +807,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
         colorClass: 'text-orange-700',
         bgClass: 'bg-orange-50',
         borderClass: 'border-orange-200',
+        tipKey: 'burdenMidTip',
         markerPercent: Math.min(100, Math.max(0, (score / 48) * 100))
       };
     }
@@ -817,6 +820,7 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
       colorClass: 'text-red-700',
       bgClass: 'bg-red-50',
       borderClass: 'border-red-200',
+      tipKey: 'burdenHighTip',
       markerPercent: Math.min(100, Math.max(0, (score / 48) * 100))
     };
   }
@@ -887,11 +891,39 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
 
             {(() => {
               const stressLevel = getCaregiverStressLevel(caregiverStressScore);
+              const distressGuide = [
+                {
+                  colorClass: 'text-green-700',
+                  dotClass: 'bg-green-500',
+                  titleKey: 'burdenLowTitle',
+                  messageKey: 'burdenLowMsg',
+                  tipKey: 'burdenLowTip'
+                },
+                {
+                  colorClass: 'text-yellow-700',
+                  dotClass: 'bg-yellow-400',
+                  titleKey: 'burdenMidTitle',
+                  messageKey: 'burdenMidMsg',
+                  tipKey: 'burdenMidTip'
+                },
+                {
+                  colorClass: 'text-red-700',
+                  dotClass: 'bg-red-500',
+                  titleKey: 'burdenHighTitle',
+                  messageKey: 'burdenHighMsg',
+                  tipKey: 'burdenHighTip'
+                }
+              ];
               const distressThermometerText = [
                 t('caregiverStressThermometer'),
                 t('distressThermometerDescription'),
                 t(stressLevel.levelKey),
-                t(stressLevel.messageKey)
+                t(stressLevel.messageKey),
+                ...distressGuide.flatMap((item) => [
+                  t(item.titleKey),
+                  t(item.messageKey),
+                  t(item.tipKey)
+                ])
               ].join('. ');
 
               return (
@@ -940,8 +972,23 @@ export function PrimaryCaregiverView({ user, profile, accessToken }) {
                         <div>
                           <p className="text-sm font-semibold text-gray-900">{t('distressThermometerWhatItMeans')}</p>
                           <p className="mt-1 text-sm text-gray-700">{t('distressThermometerDescription')}</p>
-                          <p className={`mt-3 text-sm font-semibold ${stressLevel.colorClass}`}>{t(stressLevel.levelKey)}</p>
-                          <p className="mt-1 text-sm text-gray-700">{t(stressLevel.messageKey)}</p>
+                          <div className="mt-4 grid gap-3">
+                            {distressGuide.map((item) => (
+                              <div
+                                key={item.titleKey}
+                                className={`rounded-xl border bg-white/80 p-3 ${
+                                  stressLevel.levelKey === item.titleKey ? `${stressLevel.borderClass} ring-2 ring-white` : 'border-white/70'
+                                }`}
+                              >
+                                <div className="mb-1 flex items-center gap-2">
+                                  <span className={`h-2.5 w-2.5 rounded-full ${item.dotClass}`} />
+                                  <p className={`text-sm font-bold ${item.colorClass}`}>{t(item.titleKey)}</p>
+                                </div>
+                                <p className="text-xs leading-relaxed text-gray-700">{t(item.messageKey)}</p>
+                                <p className="mt-2 text-xs font-semibold leading-relaxed text-gray-800">{t(item.tipKey)}</p>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                         <button
                           onClick={() => handleTextToSpeech(distressThermometerText)}

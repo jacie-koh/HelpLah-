@@ -1,0 +1,10 @@
+[build]
+builder = "RAILPACK"
+buildCommand = "cd \"KampongSG Mobile App Design\" && npm ci && npm run build"
+
+[deploy]
+startCommand = "cd \"KampongSG Mobile App Design\" && npm run start"
+healthcheckPath = "/"
+healthcheckTimeout = 100
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
